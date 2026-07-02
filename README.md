@@ -48,11 +48,23 @@ npm run build    # 프로덕션 빌드 (dist/)
 npm run lint     # oxlint
 ```
 
-## 배포 (Cloudflare Pages)
+## 배포 (GitHub Pages / GitHub Actions)
 
-- Build command: `npm run build`
+저장소에서 바로 배포합니다. `.github/workflows/deploy.yml`이 기본 브랜치에 푸시될 때마다 빌드 후 GitHub Pages로 배포합니다.
+
+**최초 1회 설정:**
+
+1. **Settings → Pages → Build and deployment → Source**를 `GitHub Actions`로 설정
+2. **커스텀 도메인** 사용 시 (`easymv.chichiboo.link`):
+   - Settings → Pages → Custom domain에 `easymv.chichiboo.link` 입력 (저장소의 `public/CNAME`에도 포함되어 있음)
+   - 도메인 DNS(chichiboo.link)에 CNAME 레코드 추가: `easymv` → `chichiboo123.github.io`
+   - DNS 전파 후 "Enforce HTTPS" 체크
+3. 기본 주소(`chichiboo123.github.io/easymv/`)를 쓰려면 `vite.config.ts`의 `base`를 `/easymv/`로 바꾸고 `public/CNAME`을 삭제하세요.
+
+**동작 방식:**
+- Build command: `npm run build` (CI에서 실행)
 - Output directory: `dist`
-- SPA 라우팅용 `public/_redirects` 포함됨 (`/* /index.html 200`)
+- SPA 깊은 링크(`/draw/:id` 등) 대응: 워크플로우가 `dist/index.html`을 `dist/404.html`로 복사해, GitHub Pages가 404 폴백으로 앱을 로드하면 React Router가 경로를 처리합니다.
 
 ## 라우팅
 
