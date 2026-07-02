@@ -43,7 +43,10 @@ jobs:
         run: cp dist/index.html dist/404.html
 
       - name: Setup Pages
+        # enablement: true → Pages가 아직 켜져 있지 않으면 워크플로우 소스로 자동 활성화
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
