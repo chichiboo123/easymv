@@ -87,3 +87,10 @@ export async function getUploadImage(projectId: string, clipId: string): Promise
 export async function deleteUploadImage(projectId: string, clipId: string): Promise<void> {
   await (await db()).delete('uploads', `${projectId}:${clipId}`)
 }
+
+/** 특정 프로젝트의 업로드 이미지 clipId 목록 (백업용) */
+export async function listUploadClipIds(projectId: string): Promise<string[]> {
+  const keys = (await (await db()).getAllKeys('uploads')) as string[]
+  const prefix = `${projectId}:`
+  return keys.filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length))
+}

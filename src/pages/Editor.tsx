@@ -12,6 +12,7 @@ import {
 } from '../lib/storage'
 import { loadDrawing, loadProject, sourceFromSearch } from '../lib/backend'
 import { serverAuth } from '../lib/api'
+import { applyBackup, buildBackup, readBackupFile } from '../lib/backup'
 import { downloadBlob, formatTime, genId } from '../lib/util'
 import {
   checkMp4Support,
@@ -41,6 +42,8 @@ const TRANSITION_TYPES: { v: TransitionType; label: string }[] = [
 ]
 
 const defaultTransition = (): TransitionData => ({ type: 'cut', duration: 0.6 })
+
+const CARD_BG_PRESETS = ['#FFD6E0', '#FFF3B0', '#CDE7FF', '#D7F5DD', '#E7D6FF', '#FFE0C2', '#111827', '#FFFFFF']
 
 function snap(v: number): number {
   return Math.round(v / SNAP) * SNAP
@@ -105,6 +108,15 @@ export default function Editor() {
   const [tapIndex, setTapIndex] = useState(0)
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  // 인트로/엔딩 카드 커스터마이징
+  const [introTitle, setIntroTitle] = useState('')
+  const [introBg, setIntroBg] = useState('')
+  const [introBgImage, setIntroBgImage] = useState(false)
+  const [outroHeadline, setOutroHeadline] = useState('')
+  const [outroBody, setOutroBody] = useState('')
+  const [outroBg, setOutroBg] = useState('')
+  const [outroBgImage, setOutroBgImage] = useState(false)
+  const [restoreMsg, setRestoreMsg] = useState('')
   const [resolution, setResolution] = useState<'1080' | '720'>('1080')
   const [mp4Support, setMp4Support] = useState<Mp4Support | 'unknown'>('unknown')
   const [exporting, setExporting] = useState(false)
@@ -165,6 +177,13 @@ export default function Editor() {
         setIntro(s.intro)
         setOutro(s.outro)
         setClassName(s.className)
+        setIntroTitle(s.introTitle ?? '')
+        setIntroBg(s.introBg ?? '')
+        setIntroBgImage(s.introBgImage ?? false)
+        setOutroHeadline(s.outroHeadline ?? '')
+        setOutroBody(s.outroBody ?? '')
+        setOutroBg(s.outroBg ?? '')
+        setOutroBgImage(s.outroBgImage ?? false)
       }
       setStateLoaded(true)
     })
@@ -183,12 +202,36 @@ export default function Editor() {
         intro,
         outro,
         className,
+        introTitle,
+        introBg,
+        introBgImage,
+        outroHeadline,
+        outroBody,
+        outroBg,
+        outroBgImage,
         updatedAt: new Date().toISOString(),
       }
       saveEditorState(s)
     }, 600)
     return () => clearTimeout(t)
-  }, [storageId, stateLoaded, clips, transitions, kenBurns, intro, outro, className])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    storageId,
+    stateLoaded,
+    clips,
+    transitions,
+    kenBurns,
+    intro,
+    outro,
+    className,
+    introTitle,
+    introBg,
+    introBgImage,
+    outroHeadline,
+    outroBody,
+    outroBg,
+    outroBgImage,
+  ])
 
   // ---------- 클립 비트맵 준비 ----------
   const ensureBitmap = useCallback(
@@ -198,9 +241,24 @@ export default function Editor() {
       if (!project) return null
       let bmp: ImageBitmap | null = null
       if (clip.id === 'intro') {
-        bmp = await makeTitleCard(project.title, className)
+        let bgImage: ImageBitmap | null = null
+        if (introBgImage) {
+          const blob = await getUploadImage(project.projectId, '__intro_bg__')
+          if (blob) bgImage = await createImageBitmap(blob).catch(() => null)
+        }
+        bmp = await makeTitleCard(introTitle || project.title, className, { bg: introBg || undefined, bgImage })
       } else if (clip.id === 'outro') {
-        bmp = await makeCreditCard(project.pages.map((p) => p.studentName ?? ''))
+        let bgImage: ImageBitmap | null = null
+        if (outroBgImage) {
+          const blob = await getUploadImage(project.projectId, '__outro_bg__')
+          if (blob) bgImage = await createImageBitmap(blob).catch(() => null)
+        }
+        bmp = await makeCreditCard({
+          headline: outroHeadline || undefined,
+          body: outroBody || undefined,
+          names: project.pages.map((p) => p.studentName ?? ''),
+          style: { bg: outroBg || undefined, bgImage },
+        })
       } else if (clip.pageIndex != null) {
         const page = project.pages.find((p) => p.index === clip.pageIndex)
         if (page) {
@@ -231,16 +289,26 @@ export default function Editor() {
       if (bmp) bitmapsRef.current.set(clip.id, bmp)
       return bmp
     },
-    [project, className, source],
+    [project, className, source, introTitle, introBg, introBgImage, outroHeadline, outroBody, outroBg, outroBgImage],
   )
 
-  // 인트로/크레딧 카드는 내용이 바뀌면 다시 그리기
+  // 인트로/크레딧 카드는 내용이 바뀌면 다시 그리기 (썸네일도 새로 생성)
   useEffect(() => {
     bitmapsRef.current.get('intro')?.close()
     bitmapsRef.current.delete('intro')
+    setThumbs((prev) => {
+      const { intro: _i, ...rest } = prev
+      return rest
+    })
+  }, [className, project, introTitle, introBg, introBgImage])
+  useEffect(() => {
     bitmapsRef.current.get('outro')?.close()
     bitmapsRef.current.delete('outro')
-  }, [className, project])
+    setThumbs((prev) => {
+      const { outro: _o, ...rest } = prev
+      return rest
+    })
+  }, [outroHeadline, outroBody, outroBg, outroBgImage])
 
   // 썸네일 준비
   useEffect(() => {
@@ -380,6 +448,193 @@ export default function Editor() {
       return normalized
     })
   }
+
+  // ---------- 카드 배경 이미지 ----------
+  const onCardBgImage = async (which: 'intro' | 'outro', file: File) => {
+    if (!project) return
+    await saveUploadImage(project.projectId, which === 'intro' ? '__intro_bg__' : '__outro_bg__', file)
+    if (which === 'intro') setIntroBgImage(true)
+    else setOutroBgImage(true)
+  }
+  const removeCardBgImage = (which: 'intro' | 'outro') => {
+    if (!project) return
+    deleteUploadImage(project.projectId, which === 'intro' ? '__intro_bg__' : '__outro_bg__')
+    if (which === 'intro') setIntroBgImage(false)
+    else setOutroBgImage(false)
+  }
+
+  // ---------- 백업 / 복원 ----------
+  const currentEditorState = (): EditorState => ({
+    projectId: project?.projectId ?? storageId,
+    clips,
+    transitions,
+    kenBurns,
+    showLyricOverlay: false,
+    intro,
+    outro,
+    className,
+    introTitle,
+    introBg,
+    introBgImage,
+    outroHeadline,
+    outroBody,
+    outroBg,
+    outroBgImage,
+    updatedAt: new Date().toISOString(),
+  })
+
+  const doBackup = async () => {
+    if (!project) return
+    setRestoreMsg('')
+    const blob = await buildBackup(project.projectId, project.title, currentEditorState())
+    downloadBlob(blob, `${project.title || 'easymv'}_뮤직비디오백업.emv.json`)
+    setRestoreMsg('백업 파일을 저장했어요. (음원은 저작권 보호를 위해 포함되지 않아요)')
+  }
+
+  const doRestore = async (file: File) => {
+    if (!project) return
+    setRestoreMsg('불러오는 중…')
+    try {
+      const backup = await readBackupFile(file)
+      const es = await applyBackup(project.projectId, backup)
+      setClips(es.clips)
+      setTransitions(es.transitions)
+      setKenBurns(es.kenBurns)
+      setIntro(es.intro)
+      setOutro(es.outro)
+      setClassName(es.className)
+      setIntroTitle(es.introTitle ?? '')
+      setIntroBg(es.introBg ?? '')
+      setIntroBgImage(es.introBgImage ?? false)
+      setOutroHeadline(es.outroHeadline ?? '')
+      setOutroBody(es.outroBody ?? '')
+      setOutroBg(es.outroBg ?? '')
+      setOutroBgImage(es.outroBgImage ?? false)
+      if (standalone) setProject((p) => (p ? { ...p, title: backup.title } : p))
+      bitmapsRef.current.forEach((b) => b.close())
+      bitmapsRef.current.clear()
+      setThumbs({})
+      setSelected(null)
+      setRestoreMsg('백업을 불러왔어요! 음원만 다시 올리면 돼요.')
+    } catch (e) {
+      setRestoreMsg((e as Error).message || '백업 파일을 불러오지 못했어요.')
+    }
+  }
+
+  // 카드(인트로/엔딩) 배경 선택 컨트롤
+  const cardBgControls = (which: 'intro' | 'outro') => {
+    const bg = which === 'intro' ? introBg : outroBg
+    const setBg = which === 'intro' ? setIntroBg : setOutroBg
+    const hasImg = which === 'intro' ? introBgImage : outroBgImage
+    return (
+      <div>
+        <span className="field" style={{ margin: '0 0 4px' }}>
+          배경 {hasImg && '(이미지)'}
+        </span>
+        <div className="bg-swatches">
+          <button
+            type="button"
+            className={`swatch default ${!bg && !hasImg ? 'on' : ''}`}
+            onClick={() => {
+              setBg('')
+              removeCardBgImage(which)
+            }}
+          >
+            기본
+          </button>
+          {CARD_BG_PRESETS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`swatch ${bg === c && !hasImg ? 'on' : ''}`}
+              style={{ background: c }}
+              onClick={() => {
+                removeCardBgImage(which)
+                setBg(c)
+              }}
+              aria-label={`배경색 ${c}`}
+            />
+          ))}
+          <label className="swatch pick" title="색 직접 선택">
+            <span className="material-icons-outlined" aria-hidden="true">colorize</span>
+            <input
+              type="color"
+              value={bg || '#ffd6e0'}
+              onChange={(e) => {
+                removeCardBgImage(which)
+                setBg(e.target.value)
+              }}
+            />
+          </label>
+          <label className={`swatch img ${hasImg ? 'on' : ''}`} title="배경 이미지 첨부">
+            <span className="material-icons-outlined" aria-hidden="true">image</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png"
+              className="sr-only"
+              onChange={(e) => {
+                if (e.target.files?.[0]) onCardBgImage(which, e.target.files[0])
+                e.target.value = ''
+              }}
+            />
+          </label>
+        </div>
+      </div>
+    )
+  }
+
+  const renderCardEditor = (which: 'intro' | 'outro') => (
+    <div className="card-editor">
+      {which === 'intro' ? (
+        <>
+          <div>
+            <label className="field" htmlFor="introTitle">제목</label>
+            <input
+              id="introTitle"
+              type="text"
+              value={introTitle}
+              placeholder={project?.title || '우리 반 뮤직비디오'}
+              onChange={(e) => setIntroTitle(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="field" htmlFor="introSub">부제</label>
+            <input
+              id="introSub"
+              type="text"
+              value={className}
+              placeholder="예: 3학년 2반"
+              onChange={(e) => setClassName(e.target.value)}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <div>
+            <label className="field" htmlFor="outroHead">제목</label>
+            <input
+              id="outroHead"
+              type="text"
+              value={outroHeadline}
+              placeholder="함께 만든 사람들"
+              onChange={(e) => setOutroHeadline(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="field" htmlFor="outroBody">내용</label>
+            <textarea
+              id="outroBody"
+              rows={2}
+              value={outroBody}
+              placeholder={standalone ? '예: 3학년 2반 · 봄 프로젝트' : '비우면 참여 학생 이름이 자동으로 들어가요'}
+              onChange={(e) => setOutroBody(e.target.value)}
+            />
+          </div>
+        </>
+      )}
+      {cardBgControls(which)}
+    </div>
+  )
 
   // 인트로/아웃트로 토글
   useEffect(() => {
@@ -708,7 +963,31 @@ export default function Editor() {
 
   return (
     <Layout theme="edit" wide>
-      <h1>뮤직비디오 만들기{project.title ? ` — ${project.title}` : ''}</h1>
+      <div className="edit-header">
+        <h1 style={{ margin: 0 }}>뮤직비디오 만들기{project.title ? ` — ${project.title}` : ''}</h1>
+        <div className="edit-actions">
+          <button className="icon-btn" onClick={doBackup} title="백업 저장 (편집 상태와 사진을 파일로)" aria-label="백업 저장">
+            <span className="material-icons-outlined" aria-hidden="true">save</span>
+          </button>
+          <label className="icon-btn" title="백업 불러오기" aria-label="백업 불러오기">
+            <span className="material-icons-outlined" aria-hidden="true">folder_open</span>
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="sr-only"
+              onChange={(e) => {
+                if (e.target.files?.[0]) doRestore(e.target.files[0])
+                e.target.value = ''
+              }}
+            />
+          </label>
+        </div>
+      </div>
+      {restoreMsg && (
+        <p className="sub" style={{ margin: '4px 0 12px' }} aria-live="polite">
+          {restoreMsg}
+        </p>
+      )}
       <div className="editor-layout">
         <div className="editor-top">
           {/* 미리보기 */}
@@ -806,6 +1085,11 @@ export default function Editor() {
                 <input type="checkbox" style={{ width: 20, height: 20 }} checked={outro} onChange={(e) => setOutro(e.target.checked)} />
                 {standalone ? '엔딩 카드' : '크레딧 카드 (참여 학생 이름)'}
               </label>
+              {(intro || outro) && (
+                <p className="sub" style={{ margin: 0 }}>
+                  💡 타임라인에서 <strong>제목·엔딩 카드</strong>를 누르면 글자와 배경색·이미지를 바꿀 수 있어요.
+                </p>
+              )}
               <div>
                 <label className="field" htmlFor="clsname">
                   {standalone ? '부제 (제목 카드에 작게 표시)' : '학급명 (제목 카드에 표시)'}
@@ -982,6 +1266,7 @@ export default function Editor() {
                 <span className="material-icons-outlined" aria-hidden="true">delete</span>삭제
               </button>
             </div>
+            {(selectedClip.id === 'intro' || selectedClip.id === 'outro') && renderCardEditor(selectedClip.id)}
             {selectedIndex < clips.length - 1 && transitions[selectedIndex] && (
               <div className="option-row" style={{ alignItems: 'center', marginTop: 12 }}>
                 <span className="field" style={{ margin: 0 }}>

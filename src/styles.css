@@ -974,3 +974,98 @@ select:focus-visible {
   clip: rect(0 0 0 0);
   border: 0;
 }
+
+/* ---------- 편집기 헤더/아이콘 버튼 ---------- */
+.edit-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.edit-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  color: var(--text-sub);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.icon-btn:focus-visible {
+  outline: 3px solid rgba(0, 109, 210, 0.35);
+  outline-offset: 2px;
+}
+
+/* ---------- 카드(인트로/엔딩) 편집 ---------- */
+.card-editor {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card-editor textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+}
+.bg-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-sub);
+  position: relative;
+  overflow: hidden;
+}
+.swatch.on {
+  outline: 3px solid var(--primary);
+  outline-offset: 1px;
+}
+.swatch.default {
+  background: #fff;
+  width: auto;
+  padding: 0 12px;
+}
+.swatch.pick,
+.swatch.img {
+  background: #fff;
+  color: var(--primary);
+}
+.swatch.pick .material-icons-outlined,
+.swatch.img .material-icons-outlined {
+  font-size: 18px;
+}
+.swatch.pick input[type='color'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}

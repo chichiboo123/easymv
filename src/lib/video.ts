@@ -127,62 +127,130 @@ export function drawFrame(
 
 // ---------- 카드(인트로/크레딧) 이미지 생성 ----------
 
-export function makeTitleCard(title: string, className: string): Promise<ImageBitmap> {
-  const c = document.createElement('canvas')
-  c.width = 1920
-  c.height = 1080
-  const ctx = c.getContext('2d')!
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, 1920, 1080)
+export interface CardStyle {
+  /** 단색 배경 hex (예: #FFD6E0). 비어있으면 기본 스타일 */
+  bg?: string
+  /** 배경 이미지 (있으면 색상보다 우선) */
+  bgImage?: ImageBitmap | null
+}
+
+/** 배경 밝기에 따라 읽기 좋은 글자색 선택 */
+function contrastText(hex: string): { title: string; sub: string } {
+  const n = parseInt(hex.replace('#', ''), 16)
+  if (isNaN(n)) return { title: '#111111', sub: '#555555' }
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return lum > 0.6 ? { title: '#111111', sub: '#444444' } : { title: '#ffffff', sub: '#f0f0f0' }
+}
+
+function paintCardBg(ctx: CanvasRenderingContext2D, style: CardStyle): { title: string; sub: string; shadow: boolean } {
+  if (style.bgImage) {
+    const img = style.bgImage
+    const fit = Math.max(1920 / img.width, 1080 / img.height)
+    const dw = img.width * fit
+    const dh = img.height * fit
+    ctx.drawImage(img, (1920 - dw) / 2, (1080 - dh) / 2, dw, dh)
+    // 텍스트 가독성용 어둡게 덮기
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'
+    ctx.fillRect(0, 0, 1920, 1080)
+    return { title: '#ffffff', sub: '#f0f0f0', shadow: true }
+  }
+  if (style.bg) {
+    ctx.fillStyle = style.bg
+    ctx.fillRect(0, 0, 1920, 1080)
+    const c = contrastText(style.bg)
+    return { ...c, shadow: false }
+  }
+  // 기본: 옅은 파란 그라데이션 + 파란 제목
   const grad = ctx.createLinearGradient(0, 0, 0, 1080)
   grad.addColorStop(0, '#e8f3ff')
   grad.addColorStop(1, '#ffffff')
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, 1920, 1080)
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#006dd2'
-  ctx.font = `700 ${title.length > 12 ? 96 : 128}px 'Pretendard Variable', Pretendard, sans-serif`
-  ctx.fillText(title || '우리 반 뮤직비디오', 960, 480)
-  if (className) {
-    ctx.fillStyle = '#555555'
-    ctx.font = `52px 'Pretendard Variable', Pretendard, sans-serif`
-    ctx.fillText(className, 960, 640)
-  }
-  return createImageBitmap(c)
+  return { title: '#006dd2', sub: '#555555', shadow: false }
 }
 
-export function makeCreditCard(names: string[]): Promise<ImageBitmap> {
+function wrapCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const lines: string[] = []
+  for (const raw of text.split('\n')) {
+    const words = raw.split(' ')
+    let cur = ''
+    for (const w of words) {
+      const t = cur ? cur + ' ' + w : w
+      if (ctx.measureText(t).width > maxWidth && cur) {
+        lines.push(cur)
+        cur = w
+      } else cur = t
+    }
+    lines.push(cur)
+  }
+  return lines
+}
+
+export function makeTitleCard(title: string, subtitle: string, style: CardStyle = {}): Promise<ImageBitmap> {
   const c = document.createElement('canvas')
   c.width = 1920
   c.height = 1080
   const ctx = c.getContext('2d')!
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, 1920, 1080)
+  const col = paintCardBg(ctx, style)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#006dd2'
-  ctx.font = `700 84px 'Pretendard Variable', Pretendard, sans-serif`
-  ctx.fillText('함께 만든 사람들', 960, 200)
-  ctx.fillStyle = '#333333'
-  ctx.font = `48px 'Pretendard Variable', Pretendard, sans-serif`
-  const unique = [...new Set(names.filter(Boolean))]
-  const text = unique.length ? unique.join(' · ') : '우리 반 친구들'
-  // 긴 목록은 여러 줄로
-  const lines: string[] = []
-  let cur = ''
-  for (const part of text.split(' · ')) {
-    const t = cur ? cur + ' · ' + part : part
-    if (ctx.measureText(t).width > 1600 && cur) {
-      lines.push(cur)
-      cur = part
-    } else cur = t
+  if (col.shadow) {
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'
+    ctx.shadowBlur = 16
   }
-  if (cur) lines.push(cur)
-  lines.forEach((l, i) => ctx.fillText(l, 960, 400 + i * 80))
-  ctx.fillStyle = '#999999'
+  const t = title || '우리 반 뮤직비디오'
+  ctx.fillStyle = col.title
+  ctx.font = `700 ${t.length > 12 ? 96 : 128}px 'Pretendard Variable', Pretendard, sans-serif`
+  ctx.fillText(t, 960, subtitle ? 470 : 540)
+  if (subtitle) {
+    ctx.fillStyle = col.sub
+    ctx.font = `52px 'Pretendard Variable', Pretendard, sans-serif`
+    ctx.fillText(subtitle, 960, 640)
+  }
+  return createImageBitmap(c)
+}
+
+export interface CreditOptions {
+  headline?: string
+  /** 직접 입력한 본문. 비어있으면 names로 자동 구성 */
+  body?: string
+  names?: string[]
+  style?: CardStyle
+}
+
+export function makeCreditCard(opts: CreditOptions = {}): Promise<ImageBitmap> {
+  const c = document.createElement('canvas')
+  c.width = 1920
+  c.height = 1080
+  const ctx = c.getContext('2d')!
+  const col = paintCardBg(ctx, opts.style ?? {})
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  if (col.shadow) {
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'
+    ctx.shadowBlur = 16
+  }
+  ctx.fillStyle = col.title
+  ctx.font = `700 84px 'Pretendard Variable', Pretendard, sans-serif`
+  ctx.fillText(opts.headline || '함께 만든 사람들', 960, 200)
+
+  ctx.fillStyle = col.sub
+  ctx.font = `48px 'Pretendard Variable', Pretendard, sans-serif`
+  let text = (opts.body ?? '').trim()
+  if (!text) {
+    const unique = [...new Set((opts.names ?? []).filter(Boolean))]
+    text = unique.length ? unique.join(' · ') : '우리 반 친구들'
+  }
+  const lines = wrapCanvasText(ctx, text, 1600)
+  const startY = 440 - ((lines.length - 1) * 74) / 2
+  lines.forEach((l, i) => ctx.fillText(l, 960, startY + i * 74))
+
+  ctx.fillStyle = col.shadow ? '#e8e8e8' : '#999999'
   ctx.font = `36px 'Pretendard Variable', Pretendard, sans-serif`
-  ctx.fillText('여기 있어 뮤직비디오 · 교육뮤지컬 꿈꾸는 치수쌤', 960, 960)
+  ctx.fillText('여기 있어 뮤직비디오 · 교육뮤지컬 꿈꾸는 치수쌤', 960, 980)
   return createImageBitmap(c)
 }
 

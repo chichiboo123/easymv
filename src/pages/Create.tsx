@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Layout from '../components/Layout'
 import { LYRIC_FONTS, ensureAllFontLinks, fontCss, loadFontForCanvas } from '../lib/fonts'
@@ -23,6 +23,15 @@ const SIZES: { v: FontSize; label: string }[] = [
   { v: 'lg', label: '대' },
 ]
 
+/** 마지막으로 편집하던 활동지 id (새로고침 시 이어서 편집) */
+const DRAFT_KEY = 'easymv_draft_id'
+const HISTORY_MAX = 60
+
+interface Snapshot {
+  project: Project
+  lyricsText: string
+}
+
 function newProject(): Project {
   return {
     projectId: genProjectId(),
@@ -39,11 +48,16 @@ function newProject(): Project {
 }
 
 export default function Create() {
+  const navigate = useNavigate()
   const [params] = useSearchParams()
   const editId = params.get('id')
   const [project, setProject] = useState<Project>(newProject)
   const [lyricsText, setLyricsText] = useState('')
   const [loadedFromStore, setLoadedFromStore] = useState(false)
+  // 실행취소/다시실행 히스토리
+  const histRef = useRef<{ stack: string[]; idx: number }>({ stack: [], idx: -1 })
+  const restoringRef = useRef(false)
+  const [hist, setHist] = useState({ canUndo: false, canRedo: false })
   const [fontOpen, setFontOpen] = useState(false)
   const [previews, setPreviews] = useState<string[]>([])
   const [exporting, setExporting] = useState<string | null>(null)
@@ -86,19 +100,45 @@ export default function Create() {
     }
   }, [project])
 
-  // 기존 프로젝트 불러오기
+  // 기존 프로젝트 불러오기 (id 지정 or 마지막 초안 이어서)
   useEffect(() => {
-    if (!editId) {
-      setLoadedFromStore(true)
-      return
-    }
-    getProject(editId).then((p) => {
-      if (p) {
-        setProject(p)
-        setLyricsText(p.pages.map((pg) => pg.lyric).join('\n'))
+    let cancelled = false
+    const init = async () => {
+      let loaded: Project | null = null
+      let lyrics = ''
+      if (editId) {
+        const p = await getProject(editId)
+        if (p) {
+          loaded = p
+          lyrics = p.pages.map((pg) => pg.lyric).join('\n')
+          localStorage.setItem(DRAFT_KEY, p.projectId)
+        }
+      } else {
+        const draftId = localStorage.getItem(DRAFT_KEY)
+        if (draftId) {
+          const p = await getProject(draftId)
+          if (p) {
+            loaded = p
+            lyrics = p.pages.map((pg) => pg.lyric).join('\n')
+          }
+        }
       }
+      if (cancelled) return
+      if (loaded) {
+        setProject(loaded)
+        setLyricsText(lyrics)
+      }
+      // 히스토리 시드 (현재 상태를 첫 스냅샷으로)
+      const base: Snapshot = { project: loaded ?? project, lyricsText: loaded ? lyrics : lyricsText }
+      histRef.current = { stack: [JSON.stringify(base)], idx: 0 }
+      setHist({ canUndo: false, canRedo: false })
       setLoadedFromStore(true)
-    })
+    }
+    init()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId])
 
   useEffect(() => {
@@ -136,11 +176,83 @@ export default function Create() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       saveProject(project)
+      localStorage.setItem(DRAFT_KEY, project.projectId)
     }, 700)
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
     }
   }, [project, loadedFromStore])
+
+  // 히스토리 기록 (450ms 디바운스, 복원 중에는 건너뜀)
+  useEffect(() => {
+    if (!loadedFromStore) return
+    if (restoringRef.current) {
+      restoringRef.current = false
+      return
+    }
+    const t = setTimeout(() => {
+      const snap = JSON.stringify({ project, lyricsText })
+      const h = histRef.current
+      if (h.stack[h.idx] === snap) return
+      const stack = h.stack.slice(0, h.idx + 1)
+      stack.push(snap)
+      while (stack.length > HISTORY_MAX) stack.shift()
+      histRef.current = { stack, idx: stack.length - 1 }
+      setHist({ canUndo: histRef.current.idx > 0, canRedo: false })
+    }, 450)
+    return () => clearTimeout(t)
+  }, [project, lyricsText, loadedFromStore])
+
+  const applySnapshot = (snap: string) => {
+    const s = JSON.parse(snap) as Snapshot
+    restoringRef.current = true
+    setProject(s.project)
+    setLyricsText(s.lyricsText)
+  }
+  const undo = useCallback(() => {
+    const h = histRef.current
+    if (h.idx <= 0) return
+    h.idx -= 1
+    applySnapshot(h.stack[h.idx])
+    setHist({ canUndo: h.idx > 0, canRedo: h.idx < h.stack.length - 1 })
+  }, [])
+  const redo = useCallback(() => {
+    const h = histRef.current
+    if (h.idx >= h.stack.length - 1) return
+    h.idx += 1
+    applySnapshot(h.stack[h.idx])
+    setHist({ canUndo: h.idx > 0, canRedo: h.idx < h.stack.length - 1 })
+  }, [])
+
+  const resetProject = useCallback(() => {
+    if (!window.confirm('지금 내용을 지우고 새 활동지를 시작할까요?\n(지금 활동지는 "내 프로젝트" 목록에 그대로 남아요)')) return
+    const p = newProject()
+    restoringRef.current = true
+    setProject(p)
+    setLyricsText('')
+    setFontOpen(false)
+    localStorage.setItem(DRAFT_KEY, p.projectId)
+    histRef.current = { stack: [JSON.stringify({ project: p, lyricsText: '' })], idx: 0 }
+    setHist({ canUndo: false, canRedo: false })
+    if (editId) navigate('/create', { replace: true })
+  }, [editId, navigate])
+
+  // 단축키: Ctrl/Cmd+Z 실행취소, Ctrl/Cmd+Shift+Z(또는 Ctrl+Y) 다시실행
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+        e.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
 
   // 실시간 미리보기 렌더링
   useEffect(() => {
@@ -210,7 +322,23 @@ export default function Create() {
 
   return (
     <Layout theme="create" wide>
-      <h1>활동지 만들기</h1>
+      <div className="edit-header">
+        <h1 style={{ margin: 0 }}>활동지 만들기</h1>
+        <div className="edit-actions">
+          <button className="icon-btn" onClick={undo} disabled={!hist.canUndo} title="실행취소 (Ctrl+Z)" aria-label="실행취소">
+            <span className="material-icons-outlined" aria-hidden="true">undo</span>
+          </button>
+          <button className="icon-btn" onClick={redo} disabled={!hist.canRedo} title="다시실행 (Ctrl+Shift+Z)" aria-label="다시실행">
+            <span className="material-icons-outlined" aria-hidden="true">redo</span>
+          </button>
+          <button className="icon-btn" onClick={resetProject} title="새로 만들기 (지금 내용 비우기)" aria-label="새로 만들기">
+            <span className="material-icons-outlined" aria-hidden="true">note_add</span>
+          </button>
+        </div>
+      </div>
+      <p className="sub" style={{ margin: '2px 0 14px' }}>
+        입력한 내용은 이 브라우저에 자동 저장돼요. 새로고침해도 이어서 편집할 수 있어요.
+      </p>
       <div className="create-layout">
         {/* ---------- 입력 ---------- */}
         <div className="form-stack">

@@ -67,5 +67,14 @@ export interface EditorState {
   intro: boolean
   outro: boolean
   className: string
+  /** 인트로 카드 커스터마이징 */
+  introTitle?: string
+  introBg?: string
+  introBgImage?: boolean
+  /** 엔딩 카드 커스터마이징 */
+  outroHeadline?: string
+  outroBody?: string
+  outroBg?: string
+  outroBgImage?: boolean
   updatedAt: string
 }
