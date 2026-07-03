@@ -33,11 +33,8 @@ export default function Home() {
           <br />그 그림들로 우리 반 뮤직비디오를 완성해요.
         </p>
         <div className="home-actions">
-          <Link to="/create" className="btn big">
-            <span className="material-icons-outlined" aria-hidden="true">
-              edit_document
-            </span>
-            활동지 만들기
+          <Link to="/create" className="btn big pastel">
+            프로젝트 시작
           </Link>
         </div>
       </section>
