@@ -7,8 +7,8 @@ import { exportPageJpg, exportPdf, exportZip } from '../lib/exporters'
 import { renderPageCanvas } from '../lib/render'
 import { getDrawing, getProject, saveProject } from '../lib/storage'
 import { studentLink, teacherLink } from '../lib/share'
-import { ApiError, serverCreate, serverUpdate } from '../lib/api'
-import { isAdmin, serverConfigured } from '../lib/config'
+import { ApiError, serverCreate, serverHealth, serverUpdate, type HealthResult } from '../lib/api'
+import { API_BASE, isAdmin, serverConfigured } from '../lib/config'
 import { copyText, genPin, genProjectId, splitLyrics } from '../lib/util'
 import type { FontSize, LyricPosition, PageData, Project } from '../lib/types'
 
@@ -53,7 +53,13 @@ export default function Create() {
   const [admin, setAdmin] = useState(isAdmin())
   const [publishing, setPublishing] = useState(false)
   const [publishMsg, setPublishMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [health, setHealth] = useState<HealthResult | 'checking' | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const testServer = useCallback(async () => {
+    setHealth('checking')
+    setHealth(await serverHealth())
+  }, [])
 
   useEffect(() => {
     const onChange = () => setAdmin(isAdmin())
@@ -405,15 +411,71 @@ export default function Create() {
           </div>
 
           {/* ---------- 서버 연결 (관리자 전용) ---------- */}
-          {admin && serverConfigured() && (
+          {admin && (
             <div className="card form-stack" style={{ border: '2px solid #111' }}>
               <h2 style={{ margin: 0 }}>☁️ 실시간 서버 연결 (관리자)</h2>
               <p className="sub" style={{ margin: 0 }}>
                 서버에 올리면 <strong>학생이 다른 기기·집에서도</strong> 코드로 접속해 그림을 그리고, 그 그림이 자동으로
                 내 뮤직비디오 편집기로 모여요.
               </p>
+
+              {/* 서버 연결 상태 진단 */}
+              <div
+                className="notice"
+                style={{ background: serverConfigured() ? 'var(--primary-light)' : 'var(--pastel-yellow)' }}
+              >
+                <span className="material-icons-outlined" aria-hidden="true">
+                  {serverConfigured() ? 'dns' : 'warning'}
+                </span>
+                <span style={{ wordBreak: 'break-all' }}>
+                  {serverConfigured() ? (
+                    <>
+                      서버 주소: <strong>{API_BASE}</strong>
+                    </>
+                  ) : (
+                    <>
+                      아직 <strong>서버 주소(VITE_API_BASE)</strong>가 설정되지 않았어요. 이 상태에서는 학생 그림이
+                      서버로 모이지 않아요(각 기기에만 저장). GitHub 저장소 Settings → Secrets and variables → Actions →
+                      Variables 에 <strong>VITE_API_BASE</strong> = 배포한 Worker 주소를 넣고 다시 배포하세요.
+                    </>
+                  )}
+                </span>
+              </div>
+
               <div className="option-row" style={{ alignItems: 'center' }}>
-                <button className="btn" style={{ background: '#111' }} disabled={!pageCount || publishing} onClick={publishToServer}>
+                <button className="btn secondary" onClick={testServer} disabled={health === 'checking'}>
+                  <span className="material-icons-outlined" aria-hidden="true">
+                    wifi_tethering
+                  </span>
+                  {health === 'checking' ? '확인 중…' : '연결 테스트'}
+                </button>
+                {health && health !== 'checking' && (
+                  <span
+                    className="badge"
+                    style={
+                      health.ok
+                        ? { background: 'var(--pastel-green)', color: '#1b6e42' }
+                        : { background: 'var(--pastel-pink)', color: '#a01030' }
+                    }
+                  >
+                    {health.ok
+                      ? '✅ 서버 정상 연결'
+                      : health.reason === 'no_url'
+                        ? '서버 주소 미설정'
+                        : health.reason === 'unreachable'
+                          ? '❌ 서버에 닿지 못함(주소/CORS 확인)'
+                          : `❌ 응답 오류(${health.detail ?? ''})`}
+                  </span>
+                )}
+              </div>
+
+              <div className="option-row" style={{ alignItems: 'center' }}>
+                <button
+                  className="btn"
+                  style={{ background: '#111' }}
+                  disabled={!pageCount || publishing || !serverConfigured()}
+                  onClick={publishToServer}
+                >
                   <span className="material-icons-outlined" aria-hidden="true">
                     cloud_upload
                   </span>
@@ -431,6 +493,12 @@ export default function Create() {
               {publishMsg && (
                 <p className="sub" style={{ color: publishMsg.ok ? '#1b6e42' : 'var(--danger)', margin: 0 }}>
                   {publishMsg.text}
+                </p>
+              )}
+              {project.publishedToServer && (
+                <p className="sub" style={{ margin: 0 }}>
+                  학생에게는 아래 <strong>학생용 그리기 링크(“실시간 연결” 배지가 붙은 것)</strong>를 공유하세요. 이
+                  링크에는 <code>?srv=1</code> 이 들어있어야 서버로 그림이 모여요.
                 </p>
               )}
             </div>

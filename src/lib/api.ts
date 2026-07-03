@@ -1,6 +1,25 @@
 import { API_BASE, getAdminKey } from './config'
 import type { Project } from './types'
 
+export type HealthResult =
+  | { ok: true }
+  | { ok: false; reason: 'no_url' | 'unreachable' | 'bad_response'; detail?: string }
+
+/** 서버 연결 상태 점검: 주소 설정 여부 + /api/health 도달 + CORS 확인 */
+export async function serverHealth(): Promise<HealthResult> {
+  if (!API_BASE) return { ok: false, reason: 'no_url' }
+  try {
+    const res = await fetch(`${API_BASE}/api/health`, { method: 'GET' })
+    if (!res.ok) return { ok: false, reason: 'bad_response', detail: `HTTP ${res.status}` }
+    const data = (await res.json().catch(() => null)) as { ok?: boolean } | null
+    if (data?.ok) return { ok: true }
+    return { ok: false, reason: 'bad_response', detail: '예상과 다른 응답' }
+  } catch (e) {
+    // 네트워크 실패 또는 CORS 차단
+    return { ok: false, reason: 'unreachable', detail: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 export class ApiError extends Error {
   status: number
   data: unknown
