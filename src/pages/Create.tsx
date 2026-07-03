@@ -266,7 +266,7 @@ export default function Create() {
             <h2 style={{ margin: 0 }}>페이지 디자인</h2>
             <div>
               <span className="field">가사 위치 (전체 적용)</span>
-              <div className="seg" role="group" aria-label="가사 위치">
+              <div className="seg seg-full" role="group" aria-label="가사 위치">
                 {POSITIONS.map((p) => (
                   <button
                     key={p.v}
@@ -280,7 +280,7 @@ export default function Create() {
             </div>
             <div>
               <span className="field">폰트 크기</span>
-              <div className="seg" role="group" aria-label="폰트 크기">
+              <div className="seg seg-full" role="group" aria-label="폰트 크기">
                 {SIZES.map((s) => (
                   <button
                     key={s.v}

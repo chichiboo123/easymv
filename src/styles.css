@@ -147,11 +147,12 @@ select:focus-visible {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(0, 109, 210, 0.18);
 }
-label.field {
+.field {
   display: block;
   font-weight: 700;
   font-size: 0.92rem;
-  margin-bottom: 6px;
+  color: var(--text);
+  margin-bottom: 8px;
 }
 
 /* ---------- 헤더/푸터 ---------- */
@@ -212,18 +213,27 @@ label.field {
 /* ---------- 홈 ---------- */
 .home-hero {
   text-align: center;
-  padding: 40px 8px 24px;
+  padding: 44px 8px 28px;
 }
 .home-hero h1 {
   font-size: 2rem;
-  margin: 8px 0;
+  margin: 10px 0 12px;
+  letter-spacing: -0.01em;
+}
+.home-hero .sub {
+  max-width: 400px;
+  margin: 0 auto;
+  line-height: 1.6;
 }
 .home-actions {
   display: flex;
   gap: 16px;
   justify-content: center;
   flex-wrap: wrap;
-  margin: 24px 0;
+  margin: 28px 0 8px;
+}
+.home-actions .btn.big {
+  min-width: 240px;
 }
 .feature-grid {
   display: grid;
@@ -284,30 +294,52 @@ label.field {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* KRDS 세그먼트 컨트롤: 회색 트랙 + 균등 폭 + 선택 강조 */
 .seg {
   display: inline-flex;
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-btn);
-  overflow: hidden;
+  gap: 4px;
+  padding: 4px;
+  background: #eef1f5;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.seg.seg-full {
+  display: flex;
+  width: 100%;
+}
+.seg.seg-full button {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .seg button {
   min-height: 44px;
   min-width: 56px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border: none;
-  background: #fff;
+  border-radius: 8px;
+  background: transparent;
   font-family: inherit;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   color: var(--text-sub);
+  transition:
+    background 0.12s,
+    color 0.12s,
+    box-shadow 0.12s;
 }
-.seg button + button {
-  border-left: 1.5px solid var(--border);
+.seg button:not(.on):hover {
+  background: rgba(0, 109, 210, 0.08);
+  color: var(--primary);
 }
 .seg button.on {
   background: var(--primary);
   color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+}
+.seg button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 .badge {
   display: inline-flex;
