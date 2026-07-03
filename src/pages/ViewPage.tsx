@@ -1,21 +1,24 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { exportPageJpg, exportPagePdf, renderPageWithDrawing } from '../lib/exporters'
-import { getProject } from '../lib/storage'
+import { loadDrawing, loadProject, sourceFromSearch } from '../lib/backend'
 import type { PageData, Project } from '../lib/types'
 
 export default function ViewPage() {
   const { projectId, pageIndex } = useParams()
+  const [params] = useSearchParams()
+  const source = sourceFromSearch(params)
   const [project, setProject] = useState<Project | null>(null)
   const [page, setPage] = useState<PageData | null>(null)
+  const [drawingBlob, setDrawingBlob] = useState<Blob | null>(null)
   const [imgUrl, setImgUrl] = useState('')
   const [missing, setMissing] = useState(false)
 
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
-    getProject(projectId).then(async (p) => {
+    loadProject(source, projectId).then(async (p) => {
       if (cancelled) return
       if (!p) {
         setMissing(true)
@@ -28,13 +31,16 @@ export default function ViewPage() {
       }
       setProject(p)
       setPage(pg)
-      const canvas = await renderPageWithDrawing(p, pg)
+      const d = await loadDrawing(source, projectId, Number(pageIndex))
+      const blob = d?.blob ?? null
+      setDrawingBlob(blob)
+      const canvas = await renderPageWithDrawing(p, pg, blob)
       if (!cancelled) setImgUrl(canvas.toDataURL('image/jpeg', 0.85))
     })
     return () => {
       cancelled = true
     }
-  }, [projectId, pageIndex])
+  }, [projectId, pageIndex, source])
 
   if (missing) {
     return (
@@ -70,13 +76,16 @@ export default function ViewPage() {
         </p>
         {imgUrl && <img src={imgUrl} alt={`${page.index}페이지 그림: ${page.lyric}`} />}
         <div className="option-row">
-          <button className="btn" onClick={() => exportPageJpg(project, page)}>
+          <button className="btn" onClick={() => exportPageJpg(project, page, source === 'server' ? drawingBlob : undefined)}>
             <span className="material-icons-outlined" aria-hidden="true">
               image
             </span>
             JPG 다운로드
           </button>
-          <button className="btn secondary" onClick={() => exportPagePdf(project, page)}>
+          <button
+            className="btn secondary"
+            onClick={() => exportPagePdf(project, page, source === 'server' ? drawingBlob : undefined)}
+          >
             <span className="material-icons-outlined" aria-hidden="true">
               picture_as_pdf
             </span>

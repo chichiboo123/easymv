@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { decodeShared, sharedToProject } from '../lib/share'
-import { getDrawing, getProject, saveProject } from '../lib/storage'
+import { getProject, saveProject } from '../lib/storage'
+import { loadDrawing, sourceFromSearch } from '../lib/backend'
+import { serverGetProject } from '../lib/api'
 import type { Project } from '../lib/types'
 
 const STATUS_LABEL = { empty: '⬜ 비어있음', drawing: '🎨 그리는 중', done: '✅ 완성' } as const
@@ -15,18 +17,26 @@ export default function DrawGrid() {
   const [thumbs, setThumbs] = useState<Record<number, string>>({})
   const [notFound, setNotFound] = useState(false)
 
+  const source = sourceFromSearch(params)
+
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
     const run = async () => {
-      let p = await getProject(projectId)
-      const d = params.get('d')
-      if (!p && d) {
-        // 링크 속 데이터로 프로젝트를 이 기기에 저장 (학생용 링크에는 PIN 미포함)
-        const shared = decodeShared(d)
-        if (shared && shared.projectId === projectId) {
-          p = sharedToProject(shared)
-          await saveProject(p)
+      let p: Project | undefined
+      if (source === 'server') {
+        // 서버(다른 기기)에서 프로젝트 불러오기
+        p = await serverGetProject(projectId)
+      } else {
+        p = await getProject(projectId)
+        const d = params.get('d')
+        if (!p && d) {
+          // 링크 속 데이터로 프로젝트를 이 기기에 저장 (학생용 링크에는 PIN 미포함)
+          const shared = decodeShared(d)
+          if (shared && shared.projectId === projectId) {
+            p = sharedToProject(shared)
+            await saveProject(p)
+          }
         }
       }
       if (cancelled) return
@@ -38,8 +48,8 @@ export default function DrawGrid() {
       const t: Record<number, string> = {}
       for (const page of p.pages) {
         if (page.status === 'empty') continue
-        const rec = await getDrawing(p.projectId, page.index)
-        if (rec) t[page.index] = URL.createObjectURL(rec.blob)
+        const d = await loadDrawing(source, p.projectId, page.index)
+        if (d) t[page.index] = URL.createObjectURL(d.blob)
       }
       if (!cancelled) setThumbs(t)
     }
@@ -47,7 +57,7 @@ export default function DrawGrid() {
     return () => {
       cancelled = true
     }
-  }, [projectId, params])
+  }, [projectId, params, source])
 
   if (notFound) {
     return (
@@ -79,7 +89,9 @@ export default function DrawGrid() {
           <button
             key={page.index}
             className="page-card"
-            onClick={() => navigate(`/draw/${project.projectId}/${page.index}`)}
+            onClick={() =>
+              navigate(`/draw/${project.projectId}/${page.index}${source === 'server' ? '?srv=1' : ''}`)
+            }
           >
             <div className="thumb">
               {thumbs[page.index] ? (

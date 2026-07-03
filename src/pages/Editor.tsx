@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { loadFontForCanvas } from '../lib/fonts'
 import { renderPageCanvas } from '../lib/render'
 import {
   deleteUploadImage,
-  getDrawing,
   getEditorState,
-  getProject,
   getUploadImage,
   saveEditorState,
   saveUploadImage,
 } from '../lib/storage'
+import { loadDrawing, loadProject, sourceFromSearch } from '../lib/backend'
+import { serverAuth } from '../lib/api'
 import { downloadBlob, formatTime, genId } from '../lib/util'
 import {
   checkMp4Support,
@@ -76,11 +76,14 @@ function normalize(clips: ClipData[], total: number): ClipData[] {
 
 export default function Editor() {
   const { projectId } = useParams()
+  const [params] = useSearchParams()
+  const source = sourceFromSearch(params)
   const [project, setProject] = useState<Project | null>(null)
   const [missing, setMissing] = useState(false)
   const [pinOk, setPinOk] = useState(false)
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState(false)
+  const [checkingPin, setCheckingPin] = useState(false)
 
   const [audioUrl, setAudioUrl] = useState('')
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null)
@@ -116,15 +119,17 @@ export default function Editor() {
   // ---------- 로드 ----------
   useEffect(() => {
     if (!projectId) return
-    getProject(projectId).then((p) => {
+    loadProject(source, projectId).then((p) => {
       if (!p) {
         setMissing(true)
         return
       }
       setProject(p)
-      if (sessionStorage.getItem(`easymv_pin_${projectId}`) === p.pin) setPinOk(true)
+      // 로컬은 PIN을 알고 있으므로 즉시 비교, 서버는 auth 호출로 확인
+      if (source === 'local' && sessionStorage.getItem(`easymv_pin_${projectId}`) === p.pin) setPinOk(true)
+      if (source === 'server' && sessionStorage.getItem(`easymv_pin_${projectId}`) === '1') setPinOk(true)
     })
-  }, [projectId])
+  }, [projectId, source])
 
   useEffect(() => {
     checkMp4Support().then(setMp4Support)
@@ -180,7 +185,7 @@ export default function Editor() {
         const page = project.pages.find((p) => p.index === clip.pageIndex)
         if (page) {
           await loadFontForCanvas(project.font, page.lyric)
-          const rec = await getDrawing(project.projectId, page.index)
+          const rec = await loadDrawing(source, project.projectId, page.index)
           let drawing: ImageBitmap | null = null
           if (rec) {
             try {
@@ -206,7 +211,7 @@ export default function Editor() {
       if (bmp) bitmapsRef.current.set(clip.id, bmp)
       return bmp
     },
-    [project, className],
+    [project, className, source],
   )
 
   // 인트로/크레딧 카드는 내용이 바뀌면 다시 그리기
@@ -289,10 +294,21 @@ export default function Editor() {
 
   // ---------- 이미지 소스 ----------
   const loadStudentDrawings = async () => {
-    if (!project) return
+    if (!project || !projectId) return
+    // 서버 프로젝트는 최신 상태를 다시 받아온 뒤 그림을 모음
+    let src = project
+    if (source === 'server') {
+      const fresh = await loadProject(source, projectId)
+      if (fresh) {
+        src = { ...fresh, pin: project.pin }
+        setProject(src)
+        bitmapsRef.current.clear()
+        setThumbs({})
+      }
+    }
     const withDrawings: ClipData[] = []
-    for (const page of project.pages) {
-      const rec = await getDrawing(project.projectId, page.index)
+    for (const page of src.pages) {
+      const rec = await loadDrawing(source, src.projectId, page.index)
       if (!rec) continue
       withDrawings.push({
         id: `page_${page.index}`,
@@ -302,7 +318,11 @@ export default function Editor() {
       })
     }
     if (withDrawings.length === 0) {
-      alert('저장된 학생 그림이 아직 없어요. 그리기 화면에서 저장한 그림이 이 브라우저에 있어야 해요.')
+      alert(
+        source === 'server'
+          ? '아직 제출된 학생 그림이 없어요. 학생들이 그림을 저장하면 여기서 불러올 수 있어요.'
+          : '저장된 학생 그림이 아직 없어요. 그리기 화면에서 저장한 그림이 이 브라우저에 있어야 해요.',
+      )
       return
     }
     setClips((prev) => {
@@ -597,6 +617,23 @@ export default function Editor() {
     )
   }
 
+  const submitPin = async () => {
+    if (!projectId || !project) return
+    setCheckingPin(true)
+    setPinError(false)
+    try {
+      const ok = source === 'server' ? await serverAuth(projectId, pinInput) : pinInput === project.pin
+      if (ok) {
+        sessionStorage.setItem(`easymv_pin_${projectId}`, source === 'server' ? '1' : project.pin)
+        // 서버 프로젝트는 인증 후 PIN을 프로젝트에 채워 편집/삭제 요청에 사용
+        if (source === 'server') setProject((prev) => (prev ? { ...prev, pin: pinInput } : prev))
+        setPinOk(true)
+      } else setPinError(true)
+    } finally {
+      setCheckingPin(false)
+    }
+  }
+
   if (!pinOk) {
     return (
       <Layout theme="edit">
@@ -613,27 +650,15 @@ export default function Editor() {
               setPinError(false)
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && pinInput === project.pin) {
-                sessionStorage.setItem(`easymv_pin_${projectId}`, project.pin)
-                setPinOk(true)
-              } else if (e.key === 'Enter') setPinError(true)
+              if (e.key === 'Enter') submitPin()
             }}
             aria-label="관리 코드"
             style={{ fontSize: '1.4rem', letterSpacing: 8, textAlign: 'center' }}
           />
           {pinError && <p style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>코드가 맞지 않아요.</p>}
           <div style={{ marginTop: 12 }}>
-            <button
-              className="btn"
-              style={{ width: '100%' }}
-              onClick={() => {
-                if (pinInput === project.pin) {
-                  sessionStorage.setItem(`easymv_pin_${projectId}`, project.pin)
-                  setPinOk(true)
-                } else setPinError(true)
-              }}
-            >
-              들어가기
+            <button className="btn" style={{ width: '100%' }} disabled={checkingPin} onClick={submitPin}>
+              {checkingPin ? '확인 중…' : '들어가기'}
             </button>
           </div>
         </div>

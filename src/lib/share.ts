@@ -55,7 +55,11 @@ export function sharedToProject(s: SharedProject): Project {
   }
 }
 
+// 서버에 올린 프로젝트는 코드만 담은 짧은 링크(?srv=1)를 쓰고,
+// 그렇지 않으면 설정 전체를 URL에 압축해 담는 로컬 링크를 씁니다.
+
 export function studentLink(p: Project): string {
+  if (p.publishedToServer) return `${location.origin}/draw/${p.projectId}?srv=1`
   return `${location.origin}/draw/${p.projectId}?d=${encodeProject(p, false)}`
 }
 
@@ -63,6 +67,10 @@ export function teacherLink(p: Project): string {
   return `${location.origin}/t/${p.projectId}?d=${encodeProject(p, true)}`
 }
 
-export function viewerLink(projectId: string, pageIndex: number): string {
-  return `${location.origin}/view/${projectId}/${pageIndex}`
+export function editorLink(p: Project): string {
+  return `${location.origin}/edit/${p.projectId}${p.publishedToServer ? '?srv=1' : ''}`
+}
+
+export function viewerLink(projectId: string, pageIndex: number, server = false): string {
+  return `${location.origin}/view/${projectId}/${pageIndex}${server ? '?srv=1' : ''}`
 }

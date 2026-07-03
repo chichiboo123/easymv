@@ -7,6 +7,8 @@ import { exportPageJpg, exportPdf, exportZip } from '../lib/exporters'
 import { renderPageCanvas } from '../lib/render'
 import { getDrawing, getProject, saveProject } from '../lib/storage'
 import { studentLink, teacherLink } from '../lib/share'
+import { ApiError, serverCreate, serverUpdate } from '../lib/api'
+import { isAdmin, serverConfigured } from '../lib/config'
 import { copyText, genPin, genProjectId, splitLyrics } from '../lib/util'
 import type { FontSize, LyricPosition, PageData, Project } from '../lib/types'
 
@@ -48,7 +50,35 @@ export default function Create() {
   const [progress, setProgress] = useState(0)
   const [copied, setCopied] = useState<string | null>(null)
   const [qrUrl, setQrUrl] = useState('')
+  const [admin, setAdmin] = useState(isAdmin())
+  const [publishing, setPublishing] = useState(false)
+  const [publishMsg, setPublishMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const onChange = () => setAdmin(isAdmin())
+    window.addEventListener('easymv-admin-change', onChange)
+    return () => window.removeEventListener('easymv-admin-change', onChange)
+  }, [])
+
+  const publishToServer = useCallback(async () => {
+    setPublishing(true)
+    setPublishMsg(null)
+    try {
+      if (project.publishedToServer) await serverUpdate(project)
+      else await serverCreate(project)
+      const updated = { ...project, publishedToServer: true }
+      setProject(updated)
+      await saveProject(updated)
+      setPublishMsg({ ok: true, text: '서버에 올렸어요! 학생 링크(QR)로 다른 기기에서 접속·제출할 수 있어요.' })
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401)
+        setPublishMsg({ ok: false, text: '관리자 키가 올바르지 않아요. 로고를 5번 눌러 다시 입력해 주세요.' })
+      else setPublishMsg({ ok: false, text: '서버 연결에 실패했어요. 잠시 후 다시 시도해 주세요.' })
+    } finally {
+      setPublishing(false)
+    }
+  }, [project])
 
   // 기존 프로젝트 불러오기
   useEffect(() => {
@@ -374,11 +404,50 @@ export default function Create() {
             )}
           </div>
 
+          {/* ---------- 서버 연결 (관리자 전용) ---------- */}
+          {admin && serverConfigured() && (
+            <div className="card form-stack" style={{ border: '2px solid #111' }}>
+              <h2 style={{ margin: 0 }}>☁️ 실시간 서버 연결 (관리자)</h2>
+              <p className="sub" style={{ margin: 0 }}>
+                서버에 올리면 <strong>학생이 다른 기기·집에서도</strong> 코드로 접속해 그림을 그리고, 그 그림이 자동으로
+                내 뮤직비디오 편집기로 모여요.
+              </p>
+              <div className="option-row" style={{ alignItems: 'center' }}>
+                <button className="btn" style={{ background: '#111' }} disabled={!pageCount || publishing} onClick={publishToServer}>
+                  <span className="material-icons-outlined" aria-hidden="true">
+                    cloud_upload
+                  </span>
+                  {publishing ? '올리는 중…' : project.publishedToServer ? '서버에 변경사항 반영' : '서버에 올리기'}
+                </button>
+                {project.publishedToServer && (
+                  <span className="badge" style={{ background: 'var(--pastel-green)', color: '#1b6e42' }}>
+                    <span className="material-icons-outlined" style={{ fontSize: 18 }} aria-hidden="true">
+                      check_circle
+                    </span>
+                    연결됨
+                  </span>
+                )}
+              </div>
+              {publishMsg && (
+                <p className="sub" style={{ color: publishMsg.ok ? '#1b6e42' : 'var(--danger)', margin: 0 }}>
+                  {publishMsg.text}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* ---------- 공유 ---------- */}
           <div className="card share-box">
             <h2 style={{ margin: 0 }}>공유</h2>
             <div>
-              <span className="field">학생용 그리기 링크</span>
+              <span className="field">
+                학생용 그리기 링크
+                {project.publishedToServer && (
+                  <span className="badge" style={{ marginLeft: 8, background: 'var(--pastel-green)', color: '#1b6e42' }}>
+                    실시간 연결
+                  </span>
+                )}
+              </span>
               <div className="share-row">
                 <input type="text" readOnly value={pageCount ? studentLink(project) : ''} aria-label="학생용 링크" />
                 <button className="btn secondary" disabled={!pageCount} onClick={() => doCopy('student', studentLink(project))}>
@@ -416,10 +485,17 @@ export default function Create() {
               <span className="material-icons-outlined" aria-hidden="true">
                 lock
               </span>
-              <span>
-                이 앱은 서버 없이 동작해요. 프로젝트 설정은 링크 속에 담겨 전달되고, 그림은 각 기기의 브라우저에만
-                저장돼요. 학생 이름은 선택 입력이며 어떤 계정 정보도 수집하지 않아요.
-              </span>
+              {project.publishedToServer ? (
+                <span>
+                  이 프로젝트는 서버에 올라가 있어요. 학생 링크(QR)로 다른 기기에서 접속해 그림을 제출할 수 있어요. 음원과
+                  영상은 서버에 올라가지 않고 내 브라우저에서만 처리돼요. 학생 이름은 선택 입력이에요.
+                </span>
+              ) : (
+                <span>
+                  이 앱은 서버 없이 동작해요. 프로젝트 설정은 링크 속에 담겨 전달되고, 그림은 각 기기의 브라우저에만
+                  저장돼요. 학생 이름은 선택 입력이며 어떤 계정 정보도 수집하지 않아요.
+                </span>
+              )}
             </div>
           </div>
         </div>

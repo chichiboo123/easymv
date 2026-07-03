@@ -66,6 +66,13 @@ npm run lint     # oxlint
 - Output directory: `dist`
 - SPA 깊은 링크(`/draw/:id` 등) 대응: 워크플로우가 `dist/index.html`을 `dist/404.html`로 복사해, GitHub Pages가 404 폴백으로 앱을 로드하면 React Router가 경로를 처리합니다.
 
+## 선택: 실시간 서버 연동 (Cloudflare)
+
+기본은 서버 없이 동작합니다. 학생이 **다른 기기·집에서도** 코드로 접속해 그림을 제출하고 교사가 취합하려면,
+선택적으로 Cloudflare Worker(KV + R2) 백엔드를 붙일 수 있습니다. 배포 방법은 [`worker/README.md`](worker/README.md)를
+참고하세요. 배포한 Worker 주소를 저장소 Actions Variable `VITE_API_BASE` 에 넣으면 활성화됩니다. 이 값이 없으면
+앱은 지금처럼 서버리스로만 동작합니다. (음원·완성 영상은 서버 연동 여부와 관계없이 항상 브라우저에서만 처리됩니다.)
+
 ## 라우팅
 
 | 경로 | 화면 | 대상 |

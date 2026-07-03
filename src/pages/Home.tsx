@@ -3,15 +3,22 @@ import { Link, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import { deleteProject, listProjects } from '../lib/storage'
+import { srvSuffix } from '../lib/backend'
+import { isAdmin, serverConfigured } from '../lib/config'
 import type { Project } from '../lib/types'
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>([])
   const [deleting, setDeleting] = useState<Project | null>(null)
+  const [admin, setAdmin] = useState(isAdmin())
+  const [openCode, setOpenCode] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
     listProjects().then(setProjects)
+    const onChange = () => setAdmin(isAdmin())
+    window.addEventListener('easymv-admin-change', onChange)
+    return () => window.removeEventListener('easymv-admin-change', onChange)
   }, [])
 
   return (
@@ -67,7 +74,17 @@ export default function Home() {
           <div className="project-list">
             {projects.map((p) => (
               <div key={p.projectId} className="card project-row" style={{ padding: 14 }}>
-                <span className="title">{p.title || '(제목 없음)'}</span>
+                <span className="title">
+                  {p.title || '(제목 없음)'}
+                  {p.publishedToServer && (
+                    <span
+                      className="badge"
+                      style={{ marginLeft: 8, background: 'var(--pastel-green)', color: '#1b6e42' }}
+                    >
+                      ☁️ 실시간
+                    </span>
+                  )}
+                </span>
                 <span className="meta">
                   {p.pages.length}페이지 · {new Date(p.createdAt).toLocaleDateString('ko-KR')} · ID {p.projectId}
                 </span>
@@ -77,13 +94,13 @@ export default function Home() {
                   </span>
                   편집
                 </button>
-                <button className="mini-btn" onClick={() => navigate(`/draw/${p.projectId}`)}>
+                <button className="mini-btn" onClick={() => navigate(`/draw/${p.projectId}${srvSuffix(p)}`)}>
                   <span className="material-icons-outlined" aria-hidden="true">
                     brush
                   </span>
                   그리기
                 </button>
-                <button className="mini-btn" onClick={() => navigate(`/edit/${p.projectId}`)}>
+                <button className="mini-btn" onClick={() => navigate(`/edit/${p.projectId}${srvSuffix(p)}`)}>
                   <span className="material-icons-outlined" aria-hidden="true">
                     movie
                   </span>
@@ -103,6 +120,39 @@ export default function Home() {
           프로젝트와 그림은 이 브라우저 안에만 저장돼요. 다른 기기에서 이어서 쓰려면 공유 링크를 사용하세요.
         </p>
       </section>
+
+      {admin && serverConfigured() && (
+        <section className="card" style={{ marginTop: 16, border: '2px solid #111' }}>
+          <h2 style={{ marginTop: 0 }}>☁️ 서버 프로젝트 열기 (관리자)</h2>
+          <p className="sub">
+            다른 기기에서 만든(서버에 올린) 프로젝트를 코드로 열어요. 학생 그림을 취합해 뮤직비디오를 만들 수 있어요.
+          </p>
+          <div className="share-row">
+            <input
+              type="text"
+              placeholder="프로젝트 코드 (예: a3x9k2)"
+              value={openCode}
+              onChange={(e) => setOpenCode(e.target.value.trim())}
+              style={{ maxWidth: 240 }}
+              aria-label="프로젝트 코드"
+            />
+            <button
+              className="btn"
+              disabled={!openCode}
+              onClick={() => navigate(`/edit/${openCode}?srv=1`)}
+            >
+              뮤직비디오 편집 열기
+            </button>
+            <button
+              className="btn secondary"
+              disabled={!openCode}
+              onClick={() => navigate(`/draw/${openCode}?srv=1`)}
+            >
+              그리기 화면 열기
+            </button>
+          </div>
+        </section>
+      )}
 
       {deleting && (
         <Modal

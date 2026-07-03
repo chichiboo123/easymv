@@ -1,0 +1,28 @@
+# Cloudflare Worker — easy MV 실시간 서버 (선택 기능)
+# 배포 방법은 worker/README.md 참고. 아래 <...> 값은 대시보드/CLI에서 만든 실제 값으로 채우세요.
+
+name = "easymv-api"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# 프로젝트 메타데이터(JSON) 저장용 KV
+# `npx wrangler kv namespace create PROJECTS` 로 만든 뒤 나온 id를 넣으세요.
+kv_namespaces = [
+  { binding = "PROJECTS", id = "<KV_NAMESPACE_ID>" }
+]
+
+# 학생 그림(JPG) 저장용 R2
+# `npx wrangler r2 bucket create easymv-drawings` 로 먼저 만드세요.
+[[r2_buckets]]
+binding = "DRAWINGS"
+bucket_name = "easymv-drawings"
+
+# 매일 새벽 3시(UTC) 만료(90일 지난) 프로젝트의 그림을 정리
+[triggers]
+crons = ["0 3 * * *"]
+
+# ADMIN_KEY(관리자 키)는 코드가 아니라 시크릿으로 설정하세요:
+#   npx wrangler secret put ADMIN_KEY
+# CORS 허용 출처(앱 주소). 여러 개면 쉼표로 구분. 미설정 시 모든 출처 허용.
+[vars]
+ALLOWED_ORIGINS = "https://easymv.chichiboo.link"

@@ -171,6 +171,12 @@ label.field {
   font-size: 1.05rem;
   color: var(--primary);
   text-decoration: none;
+  font-family: inherit;
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 .app-header .brand .material-icons-outlined {
   font-size: 26px;

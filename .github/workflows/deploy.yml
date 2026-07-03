@@ -36,6 +36,10 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # 서버(실시간) 기능을 쓰려면 저장소 Settings → Secrets and variables → Actions →
+          # Variables 에 VITE_API_BASE = 배포한 Worker 주소 를 추가하세요. 없으면 서버리스로만 동작.
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
 
       # SPA 라우팅 폴백: /draw/:id 등 깊은 링크로 직접 접속해도
       # GitHub Pages가 404.html(=index.html)을 내려주고 React Router가 처리

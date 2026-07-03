@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Modal from '../components/Modal'
 import { BRUSH_SIZE, DrawingEngine, ERASER_SIZE, PALETTE, PENCIL_SIZES, type Tool } from '../lib/drawing'
 import { exportPageJpg, exportPagePdf } from '../lib/exporters'
 import { loadFontForCanvas } from '../lib/fonts'
 import { PAGE_H, PAGE_W, drawLyricOverlay } from '../lib/render'
 import { viewerLink } from '../lib/share'
-import { getDrawing, getProject, saveDrawing, saveProject } from '../lib/storage'
+import { loadDrawing, loadProject, saveStudentDrawing, sourceFromSearch } from '../lib/backend'
 import { copyText } from '../lib/util'
 import type { Project } from '../lib/types'
 
@@ -20,6 +20,9 @@ export default function DrawPage() {
   const { projectId, pageIndex } = useParams()
   const pIdx = Number(pageIndex)
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const source = sourceFromSearch(params)
+  const backLink = `/draw/${projectId}${source === 'server' ? '?srv=1' : ''}`
 
   const [project, setProject] = useState<Project | null>(null)
   const [tool, setTool] = useState<Tool>('pencil')
@@ -27,9 +30,11 @@ export default function DrawPage() {
   const [color, setColor] = useState('#000000')
   const [, forceRender] = useState(0)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [modal, setModal] = useState<'name' | 'resume' | 'clear' | 'back' | 'done' | null>(null)
+  const [modal, setModal] = useState<'name' | 'resume' | 'clear' | 'back' | 'done' | 'conflict' | null>(null)
+  const [conflictName, setConflictName] = useState<string | null>(null)
   const [nameInput, setNameInput] = useState('')
   const [copied, setCopied] = useState(false)
+  const baseUpdatedRef = useRef<string | null>(null)
 
   const stageRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -47,34 +52,36 @@ export default function DrawPage() {
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
-    getProject(projectId).then(async (p) => {
+    loadProject(source, projectId).then(async (p) => {
       if (cancelled || !p) {
-        if (!p) navigate(`/draw/${projectId}`)
+        if (!p) navigate(backLink)
         return
       }
       setProject(p)
       const pg = p.pages.find((x) => x.index === pIdx)
       setNameInput(pg?.studentName ?? '')
-      if (pg?.status === 'done') setModal('resume')
+      baseUpdatedRef.current = pg?.updatedAt ?? null
+      if (pg && pg.status !== 'empty') setModal('resume')
       else setModal('name')
     })
     return () => {
       cancelled = true
     }
-  }, [projectId, pIdx, navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, pIdx])
 
   // 엔진 초기화
   const initEngine = useCallback(
     async (fromScratch: boolean) => {
       if (!canvasRef.current || !projectId) return
       if (!engineRef.current) engineRef.current = new DrawingEngine(canvasRef.current)
-      const rec = await getDrawing(projectId, pIdx)
+      const rec = fromScratch ? undefined : await loadDrawing(source, projectId, pIdx)
       if (fromScratch) engineRef.current.reset()
       else await engineRef.current.loadState(rec?.blob ?? null, rec?.ops)
       if (fromScratch) engineRef.current.dirty = false
       forceRender((n) => n + 1)
     },
-    [projectId, pIdx],
+    [projectId, pIdx, source],
   )
 
   // 가사 오버레이 렌더링
@@ -115,35 +122,47 @@ export default function DrawPage() {
     return () => window.removeEventListener('resize', onResize)
   }, [fitView, project])
 
-  // 저장
+  // 저장 (markDone: '완성'으로 저장 / auto: 30초 자동저장은 충돌검사 생략)
   const doSave = useCallback(
-    async (markDone: boolean): Promise<boolean> => {
+    async (markDone: boolean, opts: { auto?: boolean; force?: boolean } = {}): Promise<boolean> => {
       const engine = engineRef.current
-      if (!engine || !projectId) return false
+      if (!engine || !project) return false
       setSaveState('saving')
       try {
         const blob = await engine.toBlob()
-        await saveDrawing(projectId, pIdx, {
-          blob,
+        const result = await saveStudentDrawing(source, project, pIdx, blob, {
           ops: engine.serializeOps(),
-          updatedAt: new Date().toISOString(),
+          studentName: nameInput.trim() || null,
+          base: baseUpdatedRef.current,
+          markDone,
+          // 자동저장은 조용히 덮어씀(그리는 중 방해 금지), 명시적 저장만 충돌 확인
+          force: opts.force || opts.auto,
         })
-        const p = await getProject(projectId)
-        if (p) {
-          const pages = p.pages.map((pg) =>
-            pg.index === pIdx
-              ? {
-                  ...pg,
-                  status: markDone ? ('done' as const) : ('drawing' as const),
-                  studentName: nameInput.trim() || pg.studentName,
-                  updatedAt: new Date().toISOString(),
-                }
-              : pg,
-          )
-          const updated = { ...p, pages }
-          await saveProject(updated)
-          setProject(updated)
+        if (result.conflict) {
+          setConflictName(result.conflict.studentName)
+          setModal('conflict')
+          setSaveState('idle')
+          return false
         }
+        baseUpdatedRef.current = result.updatedAt
+        // 로컬 화면 상태 갱신
+        setProject((prev) =>
+          prev
+            ? {
+                ...prev,
+                pages: prev.pages.map((pg) =>
+                  pg.index === pIdx
+                    ? {
+                        ...pg,
+                        status: markDone ? 'done' : 'drawing',
+                        studentName: nameInput.trim() || pg.studentName,
+                        updatedAt: result.updatedAt,
+                      }
+                    : pg,
+                ),
+              }
+            : prev,
+        )
         engine.dirty = false
         setSaveState('saved')
         setTimeout(() => setSaveState('idle'), 2000)
@@ -153,13 +172,13 @@ export default function DrawPage() {
         return false
       }
     },
-    [projectId, pIdx, nameInput],
+    [project, pIdx, nameInput, source],
   )
 
   // 30초 자동 저장
   useEffect(() => {
     const t = setInterval(() => {
-      if (engineRef.current?.dirty) doSave(false)
+      if (engineRef.current?.dirty) doSave(false, { auto: true })
     }, 30_000)
     return () => clearInterval(t)
   }, [doSave])
@@ -264,7 +283,7 @@ export default function DrawPage() {
 
   const goBack = () => {
     if (engineRef.current?.dirty) setModal('back')
-    else navigate(`/draw/${projectId}`)
+    else navigate(backLink)
   }
 
   if (!project || !page) {
@@ -501,13 +520,13 @@ export default function DrawPage() {
           onClose={() => setModal(null)}
           actions={
             <>
-              <button className="btn ghost" onClick={() => navigate(`/draw/${projectId}`)}>
+              <button className="btn ghost" onClick={() => navigate(backLink)}>
                 저장 안 하고 나가기
               </button>
               <button
                 className="btn"
                 onClick={async () => {
-                  if (await doSave(false)) navigate(`/draw/${projectId}`)
+                  if (await doSave(false)) navigate(backLink)
                 }}
               >
                 저장하고 나가기
@@ -541,16 +560,22 @@ export default function DrawPage() {
         >
           <p className="sub">완성으로 저장하면 목록에 ✅ 완성 표시가 돼요. 나중에 이어 그릴 수도 있어요.</p>
           <div className="option-row" style={{ marginTop: 12 }}>
-            <button className="mini-btn" onClick={() => exportPageJpg(project, page)}>
+            <button
+              className="mini-btn"
+              onClick={async () => exportPageJpg(project, page, await engineRef.current?.toBlob())}
+            >
               <span className="material-icons-outlined" aria-hidden="true">image</span>내 그림 JPG
             </button>
-            <button className="mini-btn" onClick={() => exportPagePdf(project, page)}>
+            <button
+              className="mini-btn"
+              onClick={async () => exportPagePdf(project, page, await engineRef.current?.toBlob())}
+            >
               <span className="material-icons-outlined" aria-hidden="true">picture_as_pdf</span>내 그림 PDF
             </button>
             <button
               className="mini-btn"
               onClick={async () => {
-                if (await copyText(viewerLink(project.projectId, page.index))) {
+                if (await copyText(viewerLink(project.projectId, page.index, source === 'server'))) {
                   setCopied(true)
                   setTimeout(() => setCopied(false), 2000)
                 }
@@ -561,7 +586,37 @@ export default function DrawPage() {
             </button>
           </div>
           <p className="sub" style={{ marginTop: 8 }}>
-            보기 링크는 이 기기에서만 열 수 있어요. 부모님께 보여드릴 땐 JPG를 내려받아 보내 주세요.
+            {source === 'server'
+              ? '보기 링크로 다른 기기(부모님)에서도 이 그림을 볼 수 있어요.'
+              : '보기 링크는 이 기기에서만 열 수 있어요. 부모님께 보여드릴 땐 JPG를 내려받아 보내 주세요.'}
+          </p>
+        </Modal>
+      )}
+
+      {modal === 'conflict' && (
+        <Modal
+          title="다른 친구가 먼저 저장했어요"
+          onClose={() => setModal(null)}
+          actions={
+            <>
+              <button className="btn ghost" onClick={() => setModal(null)}>
+                그만두기
+              </button>
+              <button
+                className="btn danger"
+                onClick={async () => {
+                  setModal(null)
+                  await doSave(true, { force: true })
+                }}
+              >
+                내 그림으로 덮어쓰기
+              </button>
+            </>
+          }
+        >
+          <p className="sub">
+            {conflictName ? `${conflictName} 친구가 ` : '다른 친구가 '}이 페이지를 먼저 저장했어요. 내 그림으로
+            덮어쓸까요? (먼저 저장된 그림은 사라져요)
           </p>
         </Modal>
       )}

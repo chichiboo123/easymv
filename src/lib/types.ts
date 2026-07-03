@@ -22,6 +22,8 @@ export interface Project {
   fontSize: FontSize
   lyricPosition: LyricPosition
   requireName: boolean
+  /** 관리자가 이 프로젝트를 서버에 올렸는지 (그러면 공유 링크가 서버 모드로 전환) */
+  publishedToServer?: boolean
   pages: PageData[]
 }
 

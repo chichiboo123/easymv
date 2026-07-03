@@ -16,9 +16,23 @@ async function drawingBitmap(projectId: string, pageIndex: number): Promise<Imag
   }
 }
 
-export async function renderPageWithDrawing(project: Project, page: PageData): Promise<HTMLCanvasElement> {
+/**
+ * 페이지를 그림과 함께 렌더링.
+ * drawingBlob을 넘기면(undefined가 아니면) 그 그림을 사용하고, 아니면 로컬 IndexedDB에서 찾습니다.
+ * (서버 그림이나 그리기 화면의 현재 캔버스를 바로 넘길 때 사용)
+ */
+export async function renderPageWithDrawing(
+  project: Project,
+  page: PageData,
+  drawingBlob?: Blob | null,
+): Promise<HTMLCanvasElement> {
   await loadFontForCanvas(project.font, page.lyric + project.title)
-  const bmp = await drawingBitmap(project.projectId, page.index)
+  let bmp: ImageBitmap | null
+  if (drawingBlob !== undefined) {
+    bmp = drawingBlob ? await createImageBitmap(drawingBlob).catch(() => null) : null
+  } else {
+    bmp = await drawingBitmap(project.projectId, page.index)
+  }
   const canvas = renderPageCanvas(project, page, { drawing: bmp })
   bmp?.close()
   return canvas
@@ -47,15 +61,15 @@ export async function exportPdf(project: Project, onProgress?: (done: number, to
 }
 
 /** 한 페이지 JPG 다운로드 */
-export async function exportPageJpg(project: Project, page: PageData): Promise<void> {
-  const canvas = await renderPageWithDrawing(project, page)
+export async function exportPageJpg(project: Project, page: PageData, drawingBlob?: Blob | null): Promise<void> {
+  const canvas = await renderPageWithDrawing(project, page, drawingBlob)
   const blob = await canvasToJpegBlob(canvas)
   downloadBlob(blob, `${project.title || 'easymv'}_${String(page.index).padStart(2, '0')}.jpg`)
 }
 
 /** 한 페이지 PDF 다운로드 (학생용) */
-export async function exportPagePdf(project: Project, page: PageData): Promise<void> {
-  const canvas = await renderPageWithDrawing(project, page)
+export async function exportPagePdf(project: Project, page: PageData, drawingBlob?: Blob | null): Promise<void> {
+  const canvas = await renderPageWithDrawing(project, page, drawingBlob)
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, 297, 210)
   pdf.save(`${project.title || 'easymv'}_${String(page.index).padStart(2, '0')}.pdf`)
