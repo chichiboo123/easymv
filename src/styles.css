@@ -840,6 +840,9 @@ select:focus-visible {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(0, 109, 210, 0.3);
 }
+.clip.dragging {
+  opacity: 0.4;
+}
 .clip .clip-body {
   flex: 1;
   display: flex;
@@ -847,7 +850,10 @@ select:focus-visible {
   gap: 4px;
   padding: 3px 4px;
   overflow: hidden;
-  cursor: pointer;
+  cursor: grab;
+}
+.clip .clip-body:active {
+  cursor: grabbing;
 }
 .clip img {
   height: 100%;

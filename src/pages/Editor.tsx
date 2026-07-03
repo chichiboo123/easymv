@@ -104,6 +104,7 @@ export default function Editor() {
   const [tapSync, setTapSync] = useState(false)
   const [tapIndex, setTapIndex] = useState(0)
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
+  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [resolution, setResolution] = useState<'1080' | '720'>('1080')
   const [mp4Support, setMp4Support] = useState<Mp4Support | 'unknown'>('unknown')
   const [exporting, setExporting] = useState(false)
@@ -455,6 +456,20 @@ export default function Editor() {
     })
   }
 
+  /** 썸네일을 드래그해서 다른 클립 위에 놓으면 그 자리로 순서 이동 */
+  const reorderClip = (draggedId: string, dropOnId: string) => {
+    if (draggedId === dropOnId) return
+    setClips((prev) => {
+      const from = prev.findIndex((c) => c.id === draggedId)
+      const to = prev.findIndex((c) => c.id === dropOnId)
+      if (from < 0 || to < 0) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
   const removeClip = (id: string) => {
     setClips((prev) => {
       const next = prev.filter((c) => c.id !== id)
@@ -687,7 +702,9 @@ export default function Editor() {
 
   const selectedIndex = clips.findIndex((c) => c.id === selected)
   const selectedClip = selectedIndex >= 0 ? clips[selectedIndex] : null
-  const timelineW = Math.max(300, Math.round(duration * PPS))
+  // 음원이 없어도 클립 길이 합만큼은 타임라인 폭을 확보해 썸네일이 보이게 함
+  const clipsDuration = clips.reduce((s, c) => s + c.duration, 0)
+  const timelineW = Math.max(300, Math.round((duration || clipsDuration) * PPS))
 
   return (
     <Layout theme="edit" wide>
@@ -839,64 +856,91 @@ export default function Editor() {
 
         {/* 타임라인 */}
         <div className="timeline">
-          {!audioBuffer ? (
+          {clips.length === 0 ? (
             <p className="sub" style={{ margin: 8 }}>
-              먼저 음원을 업로드하면 파형과 타임라인이 나타나요.
+              사진·그림을 추가하면 여기에 순서대로 나타나요. 썸네일을 드래그하면 순서를 바꿀 수 있어요.
             </p>
           ) : (
-            <div className="timeline-inner" style={{ width: timelineW }}>
-              <div
-                className="wave-track"
-                style={{ width: timelineW }}
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  seek((e.clientX - rect.left) / PPS)
-                }}
-              >
-                <canvas ref={waveRef} />
-                <div className="playhead" style={{ left: curTime * PPS }} />
-              </div>
-              <div className="clip-track" style={{ width: timelineW }}>
-                {clips.map((clip, i) => (
+            <>
+              <div className="timeline-inner" style={{ width: timelineW }}>
+                {audioBuffer && (
                   <div
-                    key={clip.id}
-                    className={`clip ${selected === clip.id ? 'selected' : ''}`}
-                    style={{ left: clipStarts[i] * PPS, width: Math.max(20, clip.duration * PPS) }}
+                    className="wave-track"
+                    style={{ width: timelineW }}
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      seek((e.clientX - rect.left) / PPS)
+                    }}
                   >
-                    <div
-                      className="clip-body"
-                      onClick={() => setSelected(clip.id)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === 'Enter' && setSelected(clip.id)}
-                    >
-                      {thumbs[clip.id] && <img src={thumbs[clip.id]} alt="" />}
-                      <div>
-                        <div className="clip-label">{clip.label}</div>
-                        <div>{clip.duration.toFixed(1)}초</div>
-                      </div>
-                    </div>
-                    {i < clips.length - 1 && (
-                      <div
-                        className="clip-handle"
-                        onPointerDown={(e) => onHandleDown(e, i)}
-                        onPointerMove={onHandleMove}
-                        onPointerUp={onHandleUp}
-                        aria-label={`${i + 1}번과 ${i + 2}번 장면 경계 조절`}
-                        role="slider"
-                        aria-valuenow={Math.round((clipStarts[i] + clip.duration) * 10) / 10}
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'ArrowLeft') setBoundary(i, clipStarts[i] + clip.duration - SNAP)
-                          if (e.key === 'ArrowRight') setBoundary(i, clipStarts[i] + clip.duration + SNAP)
-                        }}
-                      />
-                    )}
+                    <canvas ref={waveRef} />
+                    <div className="playhead" style={{ left: curTime * PPS }} />
                   </div>
-                ))}
-                <div className="playhead" style={{ left: curTime * PPS }} />
+                )}
+                <div className="clip-track" style={{ width: timelineW }}>
+                  {clips.map((clip, i) => (
+                    <div
+                      key={clip.id}
+                      className={`clip ${selected === clip.id ? 'selected' : ''} ${draggingId === clip.id ? 'dragging' : ''}`}
+                      style={{ left: clipStarts[i] * PPS, width: Math.max(20, clip.duration * PPS) }}
+                    >
+                      <div
+                        className="clip-body"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', clip.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                          setDraggingId(clip.id)
+                        }}
+                        onDragEnd={() => setDraggingId(null)}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = 'move'
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          const draggedId = e.dataTransfer.getData('text/plain')
+                          if (draggedId) reorderClip(draggedId, clip.id)
+                          setDraggingId(null)
+                        }}
+                        onClick={() => setSelected(clip.id)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${i + 1}번째 장면: ${clip.label}. 드래그해서 순서 변경`}
+                        onKeyDown={(e) => e.key === 'Enter' && setSelected(clip.id)}
+                      >
+                        {thumbs[clip.id] && <img src={thumbs[clip.id]} alt="" draggable={false} />}
+                        <div>
+                          <div className="clip-label">{clip.label}</div>
+                          <div>{clip.duration.toFixed(1)}초</div>
+                        </div>
+                      </div>
+                      {i < clips.length - 1 && (
+                        <div
+                          className="clip-handle"
+                          onPointerDown={(e) => onHandleDown(e, i)}
+                          onPointerMove={onHandleMove}
+                          onPointerUp={onHandleUp}
+                          aria-label={`${i + 1}번과 ${i + 2}번 장면 경계 조절`}
+                          role="slider"
+                          aria-valuenow={Math.round((clipStarts[i] + clip.duration) * 10) / 10}
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowLeft') setBoundary(i, clipStarts[i] + clip.duration - SNAP)
+                            if (e.key === 'ArrowRight') setBoundary(i, clipStarts[i] + clip.duration + SNAP)
+                          }}
+                        />
+                      )}
+                    </div>
+                  ))}
+                  {audioBuffer && <div className="playhead" style={{ left: curTime * PPS }} />}
+                </div>
               </div>
-            </div>
+              {!audioBuffer && (
+                <p className="sub" style={{ margin: '8px 0 0' }}>
+                  음원을 올리면 노래 길이에 맞춰 자동으로 길이가 조절돼요. 지금은 각 장면이 3초씩이에요.
+                </p>
+              )}
+            </>
           )}
         </div>
 
