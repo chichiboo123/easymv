@@ -28,40 +28,19 @@ export default function Home() {
           music_video
         </span>
         <h1>여기 있어 뮤직비디오</h1>
-        <p className="sub">
-          노래 가사를 한 줄씩 나눠 학생들이 그림을 그리고,
-          <br />그 그림들로 우리 반 뮤직비디오를 완성해요.
-        </p>
         <div className="home-actions">
-          <Link to="/create" className="btn big pastel">
-            프로젝트 시작
+          <Link to="/create" className="home-cta" style={{ background: 'var(--pastel-blue)' }}>
+            <span className="home-cta-emoji" aria-hidden="true">📝</span>
+            <strong>프로젝트 시작</strong>
+            <span className="sub">가사 → 그리기 → 영상</span>
+          </Link>
+          <Link to="/edit" className="home-cta" style={{ background: 'var(--pastel-pink)' }}>
+            <span className="home-cta-emoji" aria-hidden="true">🎬</span>
+            <strong>뮤직비디오 만들기</strong>
+            <span className="sub">사진·음원만으로 바로</span>
           </Link>
         </div>
       </section>
-
-      <div className="feature-grid">
-        <div className="feature-card" style={{ background: 'var(--pastel-blue)' }}>
-          <span className="material-icons-outlined" aria-hidden="true">
-            edit_document
-          </span>
-          <h2>① 활동지 제작</h2>
-          <p className="sub">가사를 한 줄씩 나눠 활동지를 만들고 PDF·JPG로 내보내거나 학생 링크를 공유해요.</p>
-        </div>
-        <div className="feature-card" style={{ background: 'var(--pastel-yellow)' }}>
-          <span className="material-icons-outlined" aria-hidden="true">
-            brush
-          </span>
-          <h2>② 웹에서 그리기</h2>
-          <p className="sub">학생이 링크로 접속해 자기 페이지에 그림을 그려요. 태블릿에 딱 맞아요.</p>
-        </div>
-        <div className="feature-card" style={{ background: 'var(--pastel-pink)' }}>
-          <span className="material-icons-outlined" aria-hidden="true">
-            movie
-          </span>
-          <h2>③ 뮤직비디오 만들기</h2>
-          <p className="sub">음원과 그림을 타임라인에 얹어 MP4 뮤직비디오로 내보내요. 모두 브라우저 안에서!</p>
-        </div>
-      </div>
 
       <section className="card">
         <h2 style={{ marginTop: 0 }}>내 프로젝트</h2>

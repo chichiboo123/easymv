@@ -194,12 +194,80 @@ select:focus-visible {
 .app-header .brand .material-icons-outlined {
   font-size: 26px;
 }
-.app-header .theme-chip {
+.header-right {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.app-header .theme-chip {
   font-size: 0.8rem;
   font-weight: 700;
   padding: 6px 12px;
   border-radius: 999px;
+}
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text-sub);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.help-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.help-btn:focus-visible {
+  outline: 3px solid rgba(0, 109, 210, 0.35);
+  outline-offset: 2px;
+}
+.help-btn .material-icons-outlined {
+  font-size: 20px;
+}
+@media (max-width: 480px) {
+  .help-btn .help-label {
+    display: none;
+  }
+  .help-btn {
+    padding: 6px;
+  }
+}
+
+/* 사용법 모달 */
+.help-steps {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.help-steps li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.help-emoji {
+  font-size: 28px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+.help-steps strong {
+  font-size: 1rem;
+}
+.help-steps p {
+  margin: 2px 0 0;
+  color: var(--text-sub);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .chichiboo-footer {
@@ -238,31 +306,42 @@ select:focus-visible {
   line-height: 1.6;
 }
 .home-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 260px));
   gap: 16px;
   justify-content: center;
-  flex-wrap: wrap;
-  margin: 28px 0 8px;
+  margin: 24px 0 8px;
 }
-.home-actions .btn.big {
-  min-width: 240px;
-}
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin: 20px 0 32px;
-}
-.feature-card {
+/* 히어로 큰 진입 버튼 (아이콘 + 제목 + 한 줄 설명) */
+.home-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 18px;
   border-radius: var(--radius-card);
-  padding: 20px;
   box-shadow: var(--shadow-card);
+  text-decoration: none;
+  color: #10457a;
+  transition: transform 0.12s;
 }
-.feature-card .material-icons-outlined {
+.home-cta:hover {
+  transform: translateY(-2px);
+}
+.home-cta:focus-visible {
+  outline: 3px solid rgba(0, 109, 210, 0.4);
+  outline-offset: 2px;
+}
+.home-cta-emoji {
   font-size: 34px;
+  line-height: 1.1;
 }
-.feature-card h2 {
-  margin: 8px 0 6px;
+.home-cta strong {
+  font-size: 1.15rem;
+}
+.home-cta .sub {
+  font-size: 0.82rem;
+  color: rgba(16, 69, 122, 0.75);
 }
 .project-list {
   display: flex;

@@ -20,6 +20,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/draw/:projectId" element={<DrawGrid />} />
         <Route path="/draw/:projectId/:pageIndex" element={<DrawPage />} />
         <Route path="/view/:projectId/:pageIndex" element={<ViewPage />} />
+        <Route path="/edit" element={<Editor />} />
         <Route path="/edit/:projectId" element={<Editor />} />
       </Routes>
     </BrowserRouter>

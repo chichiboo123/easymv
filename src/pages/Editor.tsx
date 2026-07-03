@@ -78,6 +78,9 @@ export default function Editor() {
   const { projectId } = useParams()
   const [params] = useSearchParams()
   const source = sourceFromSearch(params)
+  // 활동지 없이 바로 뮤직비디오만 만드는 독립 실행 모드 (/edit, projectId 없음)
+  const standalone = !projectId
+  const storageId = projectId ?? '__standalone_mv__'
   const [project, setProject] = useState<Project | null>(null)
   const [missing, setMissing] = useState(false)
   const [pinOk, setPinOk] = useState(false)
@@ -118,8 +121,24 @@ export default function Editor() {
 
   // ---------- 로드 ----------
   useEffect(() => {
-    if (!projectId) return
-    loadProject(source, projectId).then((p) => {
+    if (standalone) {
+      // 활동지 없이 시작: 빈 프로젝트(제목만 편집)로 바로 진입, PIN 불필요
+      setProject({
+        projectId: storageId,
+        pin: '',
+        title: '',
+        createdAt: new Date().toISOString(),
+        studentCount: 0,
+        font: 'Jua',
+        fontSize: 'md',
+        lyricPosition: 'bottom',
+        requireName: false,
+        pages: [],
+      })
+      setPinOk(true)
+      return
+    }
+    loadProject(source, projectId!).then((p) => {
       if (!p) {
         setMissing(true)
         return
@@ -129,15 +148,15 @@ export default function Editor() {
       if (source === 'local' && sessionStorage.getItem(`easymv_pin_${projectId}`) === p.pin) setPinOk(true)
       if (source === 'server' && sessionStorage.getItem(`easymv_pin_${projectId}`) === '1') setPinOk(true)
     })
-  }, [projectId, source])
+  }, [projectId, source, standalone, storageId])
 
   useEffect(() => {
     checkMp4Support().then(setMp4Support)
   }, [])
 
   useEffect(() => {
-    if (!projectId || !pinOk) return
-    getEditorState(projectId).then((s) => {
+    if (!pinOk) return
+    getEditorState(storageId).then((s) => {
       if (s) {
         setClips(s.clips)
         setTransitions(s.transitions)
@@ -148,14 +167,14 @@ export default function Editor() {
       }
       setStateLoaded(true)
     })
-  }, [projectId, pinOk])
+  }, [storageId, pinOk])
 
   // 편집 상태 자동 저장
   useEffect(() => {
-    if (!projectId || !stateLoaded) return
+    if (!stateLoaded) return
     const t = setTimeout(() => {
       const s: EditorState = {
-        projectId,
+        projectId: storageId,
         clips,
         transitions,
         kenBurns,
@@ -168,7 +187,7 @@ export default function Editor() {
       saveEditorState(s)
     }, 600)
     return () => clearTimeout(t)
-  }, [projectId, stateLoaded, clips, transitions, kenBurns, intro, outro, className])
+  }, [storageId, stateLoaded, clips, transitions, kenBurns, intro, outro, className])
 
   // ---------- 클립 비트맵 준비 ----------
   const ensureBitmap = useCallback(
@@ -672,7 +691,7 @@ export default function Editor() {
 
   return (
     <Layout theme="edit" wide>
-      <h1>뮤직비디오 만들기 — {project.title}</h1>
+      <h1>뮤직비디오 만들기{project.title ? ` — ${project.title}` : ''}</h1>
       <div className="editor-layout">
         <div className="editor-top">
           {/* 미리보기 */}
@@ -716,17 +735,19 @@ export default function Editor() {
                   onChange={(e) => e.target.files?.[0] && onAudioFile(e.target.files[0])}
                 />
               </label>
-              <button className="btn secondary" onClick={loadStudentDrawings}>
-                <span className="material-icons-outlined" aria-hidden="true">
-                  collections
-                </span>
-                학생 그림 자동 불러오기
-              </button>
+              {!standalone && (
+                <button className="btn secondary" onClick={loadStudentDrawings}>
+                  <span className="material-icons-outlined" aria-hidden="true">
+                    collections
+                  </span>
+                  학생 그림 자동 불러오기
+                </button>
+              )}
               <label className="btn ghost" style={{ cursor: 'pointer' }}>
                 <span className="material-icons-outlined" aria-hidden="true">
                   add_photo_alternate
                 </span>
-                이미지 추가 (JPG/PNG)
+                {standalone ? '사진·그림 추가 (JPG/PNG)' : '이미지 추가 (JPG/PNG)'}
                 <input
                   type="file"
                   accept="image/jpeg,image/png"
@@ -742,6 +763,20 @@ export default function Editor() {
 
             <div className="card form-stack" style={{ padding: 16 }}>
               <h2 style={{ margin: 0 }}>옵션</h2>
+              {standalone && (
+                <div>
+                  <label className="field" htmlFor="mvtitle">
+                    영상 제목 (제목 카드에 표시)
+                  </label>
+                  <input
+                    id="mvtitle"
+                    type="text"
+                    placeholder="예: 우리 반 봄 노래"
+                    value={project.title}
+                    onChange={(e) => setProject((prev) => (prev ? { ...prev, title: e.target.value } : prev))}
+                  />
+                </div>
+              )}
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44, cursor: 'pointer' }}>
                 <input type="checkbox" style={{ width: 20, height: 20 }} checked={kenBurns} onChange={(e) => setKenBurns(e.target.checked)} />
                 Ken Burns 효과 (천천히 줌·이동)
@@ -752,13 +787,13 @@ export default function Editor() {
               </label>
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44, cursor: 'pointer' }}>
                 <input type="checkbox" style={{ width: 20, height: 20 }} checked={outro} onChange={(e) => setOutro(e.target.checked)} />
-                크레딧 카드 (참여 학생 이름)
+                {standalone ? '엔딩 카드' : '크레딧 카드 (참여 학생 이름)'}
               </label>
               <div>
                 <label className="field" htmlFor="clsname">
-                  학급명 (제목 카드에 표시)
+                  {standalone ? '부제 (제목 카드에 작게 표시)' : '학급명 (제목 카드에 표시)'}
                 </label>
-                <input id="clsname" type="text" placeholder="예: 3학년 2반" value={className} onChange={(e) => setClassName(e.target.value)} />
+                <input id="clsname" type="text" placeholder={standalone ? '예: 3학년 2반' : '예: 3학년 2반'} value={className} onChange={(e) => setClassName(e.target.value)} />
               </div>
             </div>
           </div>
