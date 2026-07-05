@@ -1,18 +1,24 @@
 :root {
   --primary: #006dd2;
+  --primary-dark: #0058ab;
   --primary-light: #e8f3ff;
   --pastel-blue: #bfd9f2;
   --pastel-green: #c8edd9;
   --pastel-yellow: #fff3b0;
   --pastel-pink: #ffd6e0;
-  --text: #1a1a1a;
-  --text-sub: #555;
-  --border: #d8dde4;
-  --bg: #f7f9fc;
+  --text: #191f28;
+  --text-sub: #4e5968;
+  --text-faint: #8b95a1;
+  --border: #e5e8eb;
+  --border-strong: #d1d6db;
+  --bg: #f4f7fb;
   --danger: #d32f2f;
-  --radius-btn: 8px;
+  --success: #1b6e42;
+  --radius-btn: 10px;
   --radius-card: 16px;
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 1px 2px rgba(25, 31, 40, 0.04), 0 4px 16px rgba(25, 31, 40, 0.06);
+  --shadow-raised: 0 2px 6px rgba(25, 31, 40, 0.07), 0 10px 28px rgba(25, 31, 40, 0.1);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 * {
@@ -32,6 +38,7 @@ body {
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  line-height: 1.55;
 }
 
 #root {
@@ -45,25 +52,67 @@ body {
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px 16px 48px;
+  padding: 24px 16px 56px;
 }
 
 .app-main.wide {
   max-width: 1500px;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* ---------- 타이포 ---------- */
 h1 {
-  font-size: 1.6rem;
+  font-size: 1.65rem;
   font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 h2 {
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 .sub {
   color: var(--text-sub);
   font-size: 0.9rem;
+}
+
+/* ---------- 단계 안내 (한눈에 따라가는 흐름) ---------- */
+.step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 4px;
+}
+.step-head .step-num {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+.step-head .step-body h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.step-head .step-body .sub {
+  margin: 2px 0 0;
+  display: block;
 }
 
 /* ---------- 버튼 ---------- */
@@ -71,22 +120,33 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 7px;
   min-height: 44px;
-  padding: 10px 18px;
+  padding: 10px 20px;
   border-radius: var(--radius-btn);
   border: 1px solid transparent;
   font-family: inherit;
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   background: var(--primary);
   color: #fff;
   text-decoration: none;
-  transition: filter 0.15s;
+  box-shadow: 0 1px 2px rgba(0, 88, 171, 0.25);
+  transition:
+    background 0.16s var(--ease),
+    box-shadow 0.16s var(--ease),
+    transform 0.16s var(--ease),
+    border-color 0.16s var(--ease);
 }
 .btn:hover {
-  filter: brightness(1.08);
+  background: var(--primary-dark);
+  box-shadow: 0 3px 10px rgba(0, 88, 171, 0.28);
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 88, 171, 0.2);
 }
 .btn:focus-visible {
   outline: 3px solid rgba(0, 109, 210, 0.45);
@@ -95,35 +155,55 @@ h2 {
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 .btn.secondary {
   background: #fff;
   color: var(--primary);
+  border-color: rgba(0, 109, 210, 0.55);
+  box-shadow: none;
+}
+.btn.secondary:hover {
+  background: var(--primary-light);
   border-color: var(--primary);
 }
 .btn.ghost {
-  background: transparent;
+  background: #fff;
+  color: var(--text-sub);
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+.btn.ghost:hover {
+  background: #f7f9fc;
   color: var(--text);
-  border-color: var(--border);
 }
 .btn.danger {
   background: #fff;
   color: var(--danger);
+  border-color: rgba(211, 47, 47, 0.55);
+  box-shadow: none;
+}
+.btn.danger:hover {
+  background: #fdf1f1;
   border-color: var(--danger);
 }
 .btn.pastel {
   background: var(--pastel-blue);
   color: #073763;
+  box-shadow: 0 1px 2px rgba(7, 55, 99, 0.14);
 }
 .btn.pastel:hover {
-  filter: brightness(0.97);
+  background: #aecdeb;
+  box-shadow: 0 3px 10px rgba(7, 55, 99, 0.18);
 }
 .btn.pastel:focus-visible {
   outline-color: rgba(7, 55, 99, 0.45);
 }
 .btn.big {
-  font-size: 1.1rem;
-  padding: 16px 28px;
+  font-size: 1.08rem;
+  padding: 16px 30px;
+  border-radius: 14px;
 }
 .btn .material-icons-outlined {
   font-size: 20px;
@@ -132,9 +212,10 @@ h2 {
 /* ---------- 카드 ---------- */
 .card {
   background: #fff;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
-  padding: 20px;
+  padding: 22px;
 }
 
 /* ---------- 입력 ---------- */
@@ -145,19 +226,30 @@ textarea,
 select {
   font-family: inherit;
   font-size: 1rem;
-  padding: 10px 12px;
-  border: 1.5px solid var(--border);
+  padding: 11px 14px;
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-btn);
   background: #fff;
   color: var(--text);
   width: 100%;
+  transition:
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
 }
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(0, 109, 210, 0.18);
+  box-shadow: 0 0 0 3px rgba(0, 109, 210, 0.16);
+}
+textarea {
+  line-height: 1.7;
+  resize: vertical;
 }
 .field {
   display: block;
@@ -169,7 +261,12 @@ select:focus-visible {
 
 /* ---------- 헤더/푸터 ---------- */
 .app-header {
-  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
   padding: 10px 16px;
   display: flex;
@@ -182,6 +279,7 @@ select:focus-visible {
   gap: 8px;
   font-weight: 800;
   font-size: 1.05rem;
+  letter-spacing: -0.01em;
   color: var(--primary);
   text-decoration: none;
   font-family: inherit;
@@ -203,7 +301,7 @@ select:focus-visible {
 .app-header .theme-chip {
   font-size: 0.8rem;
   font-weight: 700;
-  padding: 6px 12px;
+  padding: 6px 14px;
   border-radius: 999px;
 }
 .help-btn {
@@ -278,10 +376,11 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-sub);
+  color: var(--text-faint);
   font-size: 0.88rem;
   text-decoration: none;
   min-height: 44px;
+  transition: color 0.15s;
 }
 .chichiboo-footer a:hover {
   color: var(--primary);
@@ -292,18 +391,45 @@ select:focus-visible {
 
 /* ---------- 홈 ---------- */
 .home-hero {
+  position: relative;
   text-align: center;
-  padding: 44px 8px 28px;
+  padding: 56px 8px 36px;
+}
+.home-hero::before {
+  content: '';
+  position: absolute;
+  inset: -40px -20vw 0;
+  background:
+    radial-gradient(420px 220px at 26% 18%, rgba(191, 217, 242, 0.55), transparent 70%),
+    radial-gradient(420px 220px at 74% 12%, rgba(255, 214, 224, 0.5), transparent 70%),
+    radial-gradient(360px 200px at 52% 68%, rgba(255, 243, 176, 0.45), transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+.home-hero .hero-icon {
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, var(--primary) 0%, #2f8de8 100%);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0, 109, 210, 0.3);
+  overflow: hidden; /* 아이콘 폰트 로딩 실패 시 대체 텍스트가 넘치지 않게 */
+}
+.home-hero .hero-icon .material-icons-outlined {
+  font-size: 42px;
 }
 .home-hero h1 {
-  font-size: 2rem;
-  margin: 10px 0 12px;
-  letter-spacing: -0.01em;
+  font-size: clamp(1.9rem, 5vw, 2.4rem);
+  margin: 18px 0 10px;
 }
 .home-hero .sub {
-  max-width: 400px;
+  max-width: 420px;
   margin: 0 auto;
-  line-height: 1.6;
+  font-size: 1rem;
+  line-height: 1.7;
 }
 .home-actions {
   display: grid;
@@ -353,13 +479,19 @@ select:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+  transition:
+    transform 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+.project-row:hover {
+  box-shadow: var(--shadow-raised);
 }
 .project-row .title {
   font-weight: 700;
   margin-right: auto;
 }
 .project-row .meta {
-  color: var(--text-sub);
+  color: var(--text-faint);
   font-size: 0.85rem;
 }
 
@@ -439,8 +571,8 @@ select:focus-visible {
   background: var(--primary-light);
   color: var(--primary);
   font-size: 0.85rem;
-  font-weight: 600;
-  padding: 8px 12px;
+  font-weight: 700;
+  padding: 7px 12px;
   border-radius: 999px;
 }
 .badge.warn {
@@ -460,19 +592,21 @@ select:focus-visible {
 .preview-item img {
   width: 100%;
   display: block;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: #fff;
+  box-shadow: 0 1px 4px rgba(25, 31, 40, 0.05);
 }
 .preview-item .pnum {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  background: rgba(0, 0, 0, 0.55);
+  top: 8px;
+  left: 8px;
+  background: rgba(25, 31, 40, 0.62);
+  backdrop-filter: blur(2px);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
 }
 .preview-item .tools {
@@ -483,10 +617,10 @@ select:focus-visible {
 }
 .mini-btn {
   min-height: 44px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   font-size: 0.8rem;
   font-weight: 600;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-btn);
   background: #fff;
   cursor: pointer;
@@ -494,10 +628,16 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  color: var(--text-sub);
+  transition:
+    border-color 0.14s,
+    color 0.14s,
+    background 0.14s;
 }
 .mini-btn:hover {
   border-color: var(--primary);
   color: var(--primary);
+  background: var(--primary-light);
 }
 .mini-btn .material-icons-outlined {
   font-size: 16px;
@@ -518,6 +658,7 @@ select:focus-visible {
   flex: 1;
   min-width: 200px;
   font-size: 0.85rem;
+  background: #f7f9fc;
 }
 .qr-wrap {
   display: flex;
@@ -529,14 +670,18 @@ select:focus-visible {
   width: 160px;
   height: 160px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
+  padding: 6px;
 }
 .pin-display {
   font-size: 1.6rem;
   font-weight: 800;
   letter-spacing: 6px;
   color: var(--primary);
+  background: var(--primary-light);
+  border-radius: 10px;
+  padding: 4px 14px 4px 20px;
 }
 
 /* ---------- 그리기: 페이지 선택 ---------- */
@@ -547,18 +692,21 @@ select:focus-visible {
 }
 .page-card {
   background: #fff;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
-  border: none;
   padding: 0;
   cursor: pointer;
   text-align: left;
   overflow: hidden;
   font-family: inherit;
-  transition: transform 0.12s;
+  transition:
+    transform 0.16s var(--ease),
+    box-shadow 0.16s var(--ease);
 }
 .page-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-raised);
 }
 .page-card:focus-visible {
   outline: 3px solid rgba(0, 109, 210, 0.45);
@@ -570,7 +718,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--border);
+  color: var(--border-strong);
   overflow: hidden;
 }
 .page-card .thumb img {
@@ -604,7 +752,7 @@ select:focus-visible {
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
-  background: #eee;
+  background: #f0f2f5;
   color: #666;
 }
 .status-chip.drawing {
@@ -613,7 +761,7 @@ select:focus-visible {
 }
 .status-chip.done {
   background: var(--pastel-green);
-  color: #1b6e42;
+  color: var(--success);
 }
 
 /* ---------- 그리기 화면 ---------- */
@@ -651,7 +799,8 @@ select:focus-visible {
 }
 .draw-canvas-wrap {
   position: absolute;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 24px rgba(25, 31, 40, 0.16);
+  border-radius: 2px;
   background: #fff;
   transform-origin: 0 0;
 }
@@ -670,6 +819,7 @@ select:focus-visible {
   gap: 8px 12px;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 -2px 12px rgba(25, 31, 40, 0.05);
 }
 .tool-group {
   display: flex;
@@ -695,6 +845,13 @@ select:focus-visible {
   font-weight: 700;
   color: var(--text-sub);
   flex-shrink: 0;
+  transition:
+    border-color 0.12s,
+    background 0.12s,
+    transform 0.12s;
+}
+.tool-btn:active {
+  transform: scale(0.94);
 }
 .tool-btn .ico {
   font-size: 22px;
@@ -712,14 +869,19 @@ select:focus-visible {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 2px solid rgba(0, 0, 0, 0.15);
+  border: 2px solid rgba(0, 0, 0, 0.12);
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
+  transition: transform 0.12s var(--ease);
+}
+.color-btn:active {
+  transform: scale(0.9);
 }
 .color-btn.on {
   outline: 3px solid var(--primary);
   outline-offset: 2px;
+  transform: scale(1.08);
 }
 .size-dot {
   border-radius: 50%;
@@ -763,12 +925,12 @@ select:focus-visible {
 .editor-layout {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 .editor-top {
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) 300px;
-  gap: 14px;
+  grid-template-columns: minmax(300px, 1fr) 320px;
+  gap: 16px;
   align-items: start;
 }
 @media (max-width: 900px) {
@@ -777,10 +939,11 @@ select:focus-visible {
   }
 }
 .player-box {
-  background: #000;
+  background: #0d1117;
   border-radius: var(--radius-card);
   overflow: hidden;
   position: relative;
+  box-shadow: var(--shadow-card);
 }
 .player-box canvas {
   width: 100%;
@@ -793,14 +956,16 @@ select:focus-visible {
   gap: 10px;
   padding: 10px 12px;
   background: #fff;
+  border: 1px solid var(--border);
   border-radius: var(--radius-btn);
   flex-wrap: wrap;
 }
 .timeline {
   background: #fff;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
-  padding: 12px;
+  padding: 14px;
   overflow-x: auto;
 }
 .timeline-inner {
@@ -811,8 +976,9 @@ select:focus-visible {
   position: relative;
   height: 64px;
   background: var(--primary-light);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
+  cursor: pointer;
 }
 .wave-track canvas {
   width: 100%;
@@ -822,7 +988,7 @@ select:focus-visible {
 .clip-track {
   position: relative;
   height: 84px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 .clip {
   position: absolute;
@@ -830,11 +996,12 @@ select:focus-visible {
   height: 100%;
   background: var(--pastel-pink);
   border: 1.5px solid #e8a3b5;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   font-size: 0.72rem;
+  transition: box-shadow 0.12s;
 }
 .clip.selected {
   border-color: var(--primary);
@@ -859,7 +1026,7 @@ select:focus-visible {
   height: 100%;
   aspect-ratio: 1920/1358;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: 6px;
   flex-shrink: 0;
 }
 .clip .clip-label {
@@ -915,7 +1082,7 @@ select:focus-visible {
 }
 .progress-bar > div {
   height: 100%;
-  background: var(--primary);
+  background: linear-gradient(90deg, var(--primary), #2f8de8);
   transition: width 0.2s;
 }
 
@@ -923,20 +1090,23 @@ select:focus-visible {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(15, 20, 28, 0.5);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
   padding: 16px;
+  animation: fade-in 0.18s var(--ease);
 }
 .modal {
   background: #fff;
-  border-radius: var(--radius-card);
-  padding: 24px;
-  max-width: 420px;
+  border-radius: 20px;
+  padding: 26px 24px 22px;
+  max-width: 440px;
   width: 100%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 16px 48px rgba(15, 20, 28, 0.3);
+  animation: pop-in 0.22s var(--ease);
 }
 .modal h2 {
   margin-top: 0;
@@ -948,10 +1118,28 @@ select:focus-visible {
   margin-top: 20px;
   flex-wrap: wrap;
 }
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 
 .notice {
   background: var(--primary-light);
-  border-radius: var(--radius-btn);
+  border-radius: 12px;
   padding: 12px 14px;
   font-size: 0.88rem;
   color: #10457a;
@@ -962,6 +1150,32 @@ select:focus-visible {
 .notice .material-icons-outlined {
   font-size: 20px;
   flex-shrink: 0;
+}
+
+/* ---------- 로딩 스피너 (라우트 지연 로딩) ---------- */
+.route-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 60vh;
+  color: var(--text-faint);
+  font-size: 0.9rem;
+}
+.route-loading .spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid var(--pastel-blue);
+  border-top-color: var(--primary);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .sr-only {

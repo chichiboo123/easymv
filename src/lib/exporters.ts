@@ -1,10 +1,12 @@
-import { jsPDF } from 'jspdf'
-import JSZip from 'jszip'
 import { getDrawing } from './storage'
 import { canvasToJpegBlob, renderCoverCanvas, renderPageCanvas } from './render'
 import { loadFontForCanvas } from './fonts'
 import { downloadBlob } from './util'
 import type { PageData, Project } from './types'
+
+// PDF/ZIP 라이브러리는 무거워서 실제 내보내기를 누를 때만 내려받음 (첫 화면 로딩 속도 확보)
+const loadJsPdf = async () => (await import('jspdf')).jsPDF
+const loadJsZip = async () => (await import('jszip')).default
 
 async function drawingBitmap(projectId: string, pageIndex: number): Promise<ImageBitmap | null> {
   const rec = await getDrawing(projectId, pageIndex)
@@ -40,6 +42,7 @@ export async function renderPageWithDrawing(
 
 /** 전체 페이지(표지 포함)를 PDF 한 파일로 */
 export async function exportPdf(project: Project, onProgress?: (done: number, total: number) => void): Promise<void> {
+  const jsPDF = await loadJsPdf()
   await loadFontForCanvas(project.font, project.title + project.pages.map((p) => p.lyric).join(''))
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const W = 297
@@ -69,6 +72,7 @@ export async function exportPageJpg(project: Project, page: PageData, drawingBlo
 
 /** 한 페이지 PDF 다운로드 (학생용) */
 export async function exportPagePdf(project: Project, page: PageData, drawingBlob?: Blob | null): Promise<void> {
+  const jsPDF = await loadJsPdf()
   const canvas = await renderPageWithDrawing(project, page, drawingBlob)
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, 297, 210)
@@ -77,6 +81,7 @@ export async function exportPagePdf(project: Project, page: PageData, drawingBlo
 
 /** 전체 JPG를 ZIP으로 */
 export async function exportZip(project: Project, onProgress?: (done: number, total: number) => void): Promise<void> {
+  const JSZip = await loadJsZip()
   const zip = new JSZip()
   const total = project.pages.length
   for (let i = 0; i < project.pages.length; i++) {

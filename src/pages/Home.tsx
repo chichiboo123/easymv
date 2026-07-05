@@ -24,8 +24,10 @@ export default function Home() {
   return (
     <Layout>
       <section className="home-hero">
-        <span className="material-icons-outlined" style={{ fontSize: 56, color: 'var(--primary)' }} aria-hidden="true">
-          music_video
+        <span className="hero-icon">
+          <span className="material-icons-outlined" aria-hidden="true">
+            music_video
+          </span>
         </span>
         <h1>여기 있어 뮤직비디오</h1>
         <div className="home-actions">
@@ -45,7 +47,7 @@ export default function Home() {
       <section className="card">
         <h2 style={{ marginTop: 0 }}>내 프로젝트</h2>
         {projects.length === 0 ? (
-          <p className="sub">아직 만든 프로젝트가 없어요. [활동지 만들기]로 시작해 보세요!</p>
+          <p className="sub">아직 만든 프로젝트가 없어요. 위의 [프로젝트 시작] 버튼으로 시작해 보세요!</p>
         ) : (
           <div className="project-list">
             {projects.map((p) => (

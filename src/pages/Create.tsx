@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Layout from '../components/Layout'
+import StepTitle from '../components/StepTitle'
 import { LYRIC_FONTS, ensureAllFontLinks, fontCss, loadFontForCanvas } from '../lib/fonts'
 import { exportPageJpg, exportPdf, exportZip } from '../lib/exporters'
 import { renderPageCanvas } from '../lib/render'
@@ -343,6 +344,7 @@ export default function Create() {
         {/* ---------- 입력 ---------- */}
         <div className="form-stack">
           <div className="card form-stack">
+            <StepTitle n={1} title="가사 입력" desc="한 줄이 한 페이지가 돼요" />
             <div>
               <label className="field" htmlFor="title">
                 프로젝트 제목
@@ -397,7 +399,7 @@ export default function Create() {
 
           {/* ---------- 디자인 옵션 ---------- */}
           <div className="card form-stack">
-            <h2 style={{ margin: 0 }}>페이지 디자인</h2>
+            <StepTitle n={2} title="페이지 디자인" desc="미리보기를 보며 골라요" />
             <div>
               <span className="field">가사 위치 (전체 적용)</span>
               <div className="seg seg-full" role="group" aria-label="가사 위치">
@@ -489,7 +491,7 @@ export default function Create() {
 
           {/* ---------- 내보내기 ---------- */}
           <div className="card form-stack">
-            <h2 style={{ margin: 0 }}>내보내기</h2>
+            <StepTitle n={3} title="인쇄·내보내기" desc="종이 활동지가 필요할 때" />
             <div className="option-row">
               <button
                 className="btn"
@@ -634,7 +636,7 @@ export default function Create() {
 
           {/* ---------- 공유 ---------- */}
           <div className="card share-box">
-            <h2 style={{ margin: 0 }}>공유</h2>
+            <StepTitle n={4} title="학생과 공유" desc="링크나 QR코드를 보여주면 끝!" />
             <div>
               <span className="field">
                 학생용 그리기 링크

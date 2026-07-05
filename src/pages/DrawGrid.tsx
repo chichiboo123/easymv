@@ -83,7 +83,15 @@ export default function DrawGrid() {
   return (
     <Layout theme="draw" wide>
       <h1>{project.title || '우리 반 뮤직비디오'}</h1>
-      <p className="sub">자기가 맡은 페이지를 눌러서 그림을 그려요!</p>
+      <div className="notice" style={{ margin: '10px 0 16px', maxWidth: 640 }}>
+        <span className="material-icons-outlined" aria-hidden="true">
+          touch_app
+        </span>
+        <span>
+          <strong>내가 맡은 가사 카드를 눌러</strong> 그림을 그려요. 다 그리면 <strong>완성!</strong> 버튼을 누르는 것,
+          잊지 마세요.
+        </span>
+      </div>
       <div className="page-grid">
         {project.pages.map((page) => (
           <button

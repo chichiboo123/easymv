@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
+import StepTitle from '../components/StepTitle'
 import { loadFontForCanvas } from '../lib/fonts'
 import { renderPageCanvas } from '../lib/render'
 import {
@@ -1018,7 +1019,7 @@ export default function Editor() {
           {/* 설정 패널 */}
           <div className="editor-panel">
             <div className="card form-stack" style={{ padding: 16 }}>
-              <h2 style={{ margin: 0 }}>소스 불러오기</h2>
+              <StepTitle n={1} title="음원·그림 불러오기" desc="음원을 올리고 학생 그림을 모아요" />
               <label className="btn secondary" style={{ cursor: 'pointer' }}>
                 <span className="material-icons-outlined" aria-hidden="true">
                   music_note
@@ -1058,7 +1059,9 @@ export default function Editor() {
             </div>
 
             <div className="card form-stack" style={{ padding: 16 }}>
-              <h2 style={{ margin: 0 }}>옵션</h2>
+              <h2 style={{ margin: 0 }}>
+                꾸미기 옵션 <span className="sub" style={{ fontWeight: 500 }}>(선택)</span>
+              </h2>
               {standalone && (
                 <div>
                   <label className="field" htmlFor="mvtitle">
@@ -1101,7 +1104,8 @@ export default function Editor() {
         </div>
 
         {/* 탭 싱크 */}
-        <div className="card" style={{ padding: 16 }}>
+        <div className="card form-stack" style={{ padding: 16 }}>
+          <StepTitle n={2} title="타이밍 맞추기" desc="음악을 들으며 가사가 바뀔 때마다 탭! 아래 타임라인에서 세밀하게 다듬을 수 있어요" />
           <div className="option-row" style={{ alignItems: 'center' }}>
             {!tapSync ? (
               <button className="btn big" onClick={startTapSync} disabled={!audioUrl || clips.length < 2}>
@@ -1132,9 +1136,7 @@ export default function Editor() {
               </span>
               균등 분배
             </button>
-            <span className="sub">
-              음악을 들으며 가사가 바뀔 때마다 버튼(또는 스페이스바)을 누르면 타이밍이 자동으로 기록돼요.
-            </span>
+            <span className="sub">PC에서는 스페이스바로도 탭할 수 있어요.</span>
           </div>
         </div>
 
@@ -1321,7 +1323,7 @@ export default function Editor() {
 
         {/* 내보내기 */}
         <div className="card form-stack" style={{ padding: 16 }}>
-          <h2 style={{ margin: 0 }}>내보내기</h2>
+          <StepTitle n={3} title="영상 만들기" desc="완성된 뮤직비디오를 내려받아요" />
           <div className="option-row" style={{ alignItems: 'center' }}>
             <div className="seg" role="group" aria-label="해상도">
               <button className={resolution === '1080' ? 'on' : ''} onClick={() => setResolution('1080')}>
