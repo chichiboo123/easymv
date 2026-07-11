@@ -987,8 +987,20 @@ textarea {
 }
 .clip-track {
   position: relative;
-  height: 84px;
+  height: 108px;
   margin-top: 8px;
+  /* 클립 아래 여백은 드래그(마퀴) 선택 영역 */
+  touch-action: none;
+}
+.marquee-box {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(0, 109, 210, 0.12);
+  border: 1.5px dashed var(--primary);
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 7;
 }
 .clip {
   position: absolute;

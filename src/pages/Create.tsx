@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Layout from '../components/Layout'
 import StepTitle from '../components/StepTitle'
@@ -49,7 +49,6 @@ function newProject(): Project {
 }
 
 export default function Create() {
-  const navigate = useNavigate()
   const [params] = useSearchParams()
   const editId = params.get('id')
   const [project, setProject] = useState<Project>(newProject)
@@ -225,18 +224,22 @@ export default function Create() {
     setHist({ canUndo: h.idx > 0, canRedo: h.idx < h.stack.length - 1 })
   }, [])
 
+  // 초기화: 지금 활동지의 내용(제목·가사·페이지·디자인)을 모두 비움 (실행취소로 되돌릴 수 있음)
   const resetProject = useCallback(() => {
-    if (!window.confirm('지금 내용을 지우고 새 활동지를 시작할까요?\n(지금 활동지는 "내 프로젝트" 목록에 그대로 남아요)')) return
-    const p = newProject()
-    restoringRef.current = true
-    setProject(p)
+    if (!window.confirm('지금 활동지 내용을 모두 지울까요?\n(실행취소(Ctrl+Z)로 되돌릴 수 있어요)')) return
+    setProject((prev) => ({
+      ...prev,
+      title: '',
+      studentCount: 20,
+      font: 'Jua',
+      fontSize: 'md',
+      lyricPosition: 'bottom',
+      requireName: false,
+      pages: [],
+    }))
     setLyricsText('')
     setFontOpen(false)
-    localStorage.setItem(DRAFT_KEY, p.projectId)
-    histRef.current = { stack: [JSON.stringify({ project: p, lyricsText: '' })], idx: 0 }
-    setHist({ canUndo: false, canRedo: false })
-    if (editId) navigate('/create', { replace: true })
-  }, [editId, navigate])
+  }, [])
 
   // 단축키: Ctrl/Cmd+Z 실행취소, Ctrl/Cmd+Shift+Z(또는 Ctrl+Y) 다시실행
   useEffect(() => {
@@ -332,8 +335,8 @@ export default function Create() {
           <button className="icon-btn" onClick={redo} disabled={!hist.canRedo} title="다시실행 (Ctrl+Shift+Z)" aria-label="다시실행">
             <span className="material-icons-outlined" aria-hidden="true">redo</span>
           </button>
-          <button className="icon-btn" onClick={resetProject} title="새로 만들기 (지금 내용 비우기)" aria-label="새로 만들기">
-            <span className="material-icons-outlined" aria-hidden="true">note_add</span>
+          <button className="icon-btn" onClick={resetProject} title="초기화 (지금 내용 모두 비우기)" aria-label="초기화">
+            <span className="material-icons-outlined" aria-hidden="true">restart_alt</span>
           </button>
         </div>
       </div>
