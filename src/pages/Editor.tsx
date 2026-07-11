@@ -8,6 +8,7 @@ import {
   deleteUploadImage,
   getEditorState,
   getUploadImage,
+  listUploadClipIds,
   saveEditorState,
   saveUploadImage,
 } from '../lib/storage'
@@ -31,6 +32,26 @@ const PPS = 24 // 타임라인 픽셀/초
 const SNAP = 0.5
 const MIN_CLIP = 0.5
 const CLIP_BITMAP_SCALE = 0.8 // 1536×1086 — 메모리와 화질 절충
+const HISTORY_MAX = 60
+const CLIP_H = 84 // 클립(썸네일) 높이
+const TRACK_H = 108 // 클립 트랙 높이 (아래 여백은 드래그 선택 영역)
+
+/** 실행취소/다시실행 스냅샷 (편집 상태만, 음원 제외) */
+interface EdSnapshot {
+  clips: ClipData[]
+  transitions: TransitionData[]
+  kenBurns: boolean
+  intro: boolean
+  outro: boolean
+  className: string
+  introTitle: string
+  introBg: string
+  introBgImage: boolean
+  outroHeadline: string
+  outroBody: string
+  outroBg: string
+  outroBgImage: boolean
+}
 
 const TRANSITION_TYPES: { v: TransitionType; label: string }[] = [
   { v: 'cut', label: '컷' },
@@ -102,7 +123,9 @@ export default function Editor() {
   const [intro, setIntro] = useState(false)
   const [outro, setOutro] = useState(false)
   const [className, setClassName] = useState('')
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [marquee, setMarquee] = useState<{ x0: number; x1: number } | null>(null)
+  const [hist, setHist] = useState({ canUndo: false, canRedo: false })
   const [playing, setPlaying] = useState(false)
   const [curTime, setCurTime] = useState(0)
   const [tapSync, setTapSync] = useState(false)
@@ -130,6 +153,12 @@ export default function Editor() {
   const bitmapsRef = useRef(new Map<string, ImageBitmap>())
   const exportSignal = useRef<{ cancelled: boolean }>({ cancelled: false })
   const dragRef = useRef<{ index: number; startX: number; startDur: number; nextDur: number } | null>(null)
+  // 드래그 선택(마퀴)
+  const marqueeRef = useRef<{ startX: number; curX: number; left: number; moved: boolean; pointerId: number } | null>(null)
+  // 실행취소/다시실행 히스토리
+  const histRef = useRef<{ stack: string[]; idx: number }>({ stack: [], idx: -1 })
+  const restoringRef = useRef(false)
+  const buildSnapRef = useRef<() => string>(() => '')
 
   const duration = audioBuffer?.duration ?? 0
 
@@ -233,6 +262,115 @@ export default function Editor() {
     outroBg,
     outroBgImage,
   ])
+
+  // ---------- 실행취소 / 다시실행 ----------
+  const buildSnap = useCallback(
+    () =>
+      JSON.stringify({
+        clips,
+        transitions,
+        kenBurns,
+        intro,
+        outro,
+        className,
+        introTitle,
+        introBg,
+        introBgImage,
+        outroHeadline,
+        outroBody,
+        outroBg,
+        outroBgImage,
+      } satisfies EdSnapshot),
+    [
+      clips,
+      transitions,
+      kenBurns,
+      intro,
+      outro,
+      className,
+      introTitle,
+      introBg,
+      introBgImage,
+      outroHeadline,
+      outroBody,
+      outroBg,
+      outroBgImage,
+    ],
+  )
+  buildSnapRef.current = buildSnap
+
+  // 아직 디바운스로 기록되지 않은 최신 편집을 히스토리에 먼저 반영
+  const flushPending = () => {
+    const h = histRef.current
+    if (h.idx < 0) return
+    const cur = buildSnapRef.current()
+    if (h.stack[h.idx] === cur) return
+    const stack = h.stack.slice(0, h.idx + 1)
+    stack.push(cur)
+    while (stack.length > HISTORY_MAX) stack.shift()
+    histRef.current = { stack, idx: stack.length - 1 }
+  }
+
+  // 히스토리 시드 (편집 상태를 처음 불러온 뒤 첫 스냅샷 기록)
+  useEffect(() => {
+    if (!stateLoaded || histRef.current.idx >= 0) return
+    histRef.current = { stack: [buildSnap()], idx: 0 }
+    setHist({ canUndo: false, canRedo: false })
+  }, [stateLoaded, buildSnap])
+
+  // 히스토리 기록 (450ms 디바운스, 복원 중에는 건너뜀)
+  useEffect(() => {
+    if (!stateLoaded || histRef.current.idx < 0) return
+    if (restoringRef.current) {
+      restoringRef.current = false
+      return
+    }
+    const t = setTimeout(() => {
+      const snap = buildSnap()
+      const h = histRef.current
+      if (h.stack[h.idx] === snap) return
+      const stack = h.stack.slice(0, h.idx + 1)
+      stack.push(snap)
+      while (stack.length > HISTORY_MAX) stack.shift()
+      histRef.current = { stack, idx: stack.length - 1 }
+      setHist({ canUndo: histRef.current.idx > 0, canRedo: false })
+    }, 450)
+    return () => clearTimeout(t)
+  }, [buildSnap, stateLoaded])
+
+  const applyEdSnapshot = (str: string) => {
+    const s = JSON.parse(str) as EdSnapshot
+    restoringRef.current = true
+    setClips(s.clips)
+    setTransitions(s.transitions)
+    setKenBurns(s.kenBurns)
+    setIntro(s.intro)
+    setOutro(s.outro)
+    setClassName(s.className)
+    setIntroTitle(s.introTitle)
+    setIntroBg(s.introBg)
+    setIntroBgImage(s.introBgImage)
+    setOutroHeadline(s.outroHeadline)
+    setOutroBody(s.outroBody)
+    setOutroBg(s.outroBg)
+    setOutroBgImage(s.outroBgImage)
+    setSelectedIds([])
+  }
+  const undo = useCallback(() => {
+    flushPending()
+    const h = histRef.current
+    if (h.idx <= 0) return
+    h.idx -= 1
+    applyEdSnapshot(h.stack[h.idx])
+    setHist({ canUndo: h.idx > 0, canRedo: h.idx < h.stack.length - 1 })
+  }, [])
+  const redo = useCallback(() => {
+    const h = histRef.current
+    if (h.idx >= h.stack.length - 1) return
+    h.idx += 1
+    applyEdSnapshot(h.stack[h.idx])
+    setHist({ canUndo: h.idx > 0, canRedo: h.idx < h.stack.length - 1 })
+  }, [])
 
   // ---------- 클립 비트맵 준비 ----------
   const ensureBitmap = useCallback(
@@ -515,7 +653,7 @@ export default function Editor() {
       bitmapsRef.current.forEach((b) => b.close())
       bitmapsRef.current.clear()
       setThumbs({})
-      setSelected(null)
+      setSelectedIds([])
       setRestoreMsg('백업을 불러왔어요! 음원만 다시 올리면 돼요.')
     } catch (e) {
       setRestoreMsg((e as Error).message || '백업 파일을 불러오지 못했어요.')
@@ -726,19 +864,166 @@ export default function Editor() {
     })
   }
 
-  const removeClip = (id: string) => {
-    setClips((prev) => {
-      const next = prev.filter((c) => c.id !== id)
-      setTransitions((tr) => tr.slice(0, Math.max(0, next.length - 1)))
-      return duration && next.length ? normalize(next, duration) : next
-    })
-    if (id.startsWith('up_') && project) deleteUploadImage(project.projectId, id)
-    if (id === 'intro') setIntro(false)
-    if (id === 'outro') setOutro(false)
-    bitmapsRef.current.get(id)?.close()
-    bitmapsRef.current.delete(id)
-    setSelected(null)
+  const removeClips = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return
+      const idset = new Set(ids)
+      setClips((prev) => {
+        const next = prev.filter((c) => !idset.has(c.id))
+        setTransitions((tr) => tr.slice(0, Math.max(0, next.length - 1)))
+        return duration && next.length ? normalize(next, duration) : next
+      })
+      for (const id of ids) {
+        // 업로드 이미지 blob은 즉시 지우지 않음 — 실행취소로 되돌릴 수 있게 유지
+        // (프로젝트 삭제 시 또는 초기화 시 정리됨)
+        if (id === 'intro') setIntro(false)
+        if (id === 'outro') setOutro(false)
+        bitmapsRef.current.get(id)?.close()
+        bitmapsRef.current.delete(id)
+      }
+      setSelectedIds([])
+    },
+    [duration],
+  )
+  const removeClip = (id: string) => removeClips([id])
+
+  // 초기화: 편집 내용(장면·전환·카드·음원)을 모두 비움
+  const purgeAllUploads = useCallback(async () => {
+    if (!project) return
+    const ids = await listUploadClipIds(project.projectId)
+    for (const id of ids) await deleteUploadImage(project.projectId, id)
+  }, [project])
+
+  const resetEditor = useCallback(() => {
+    if (clips.length === 0 && !audioUrl && !className && !intro && !outro) return
+    if (
+      !window.confirm(
+        '영상 편집 내용을 모두 지울까요?\n장면·전환·제목/엔딩 카드·음원이 초기화돼요. (장면 편집은 실행취소로 되돌릴 수 있어요)',
+      )
+    )
+      return
+    bitmapsRef.current.forEach((b) => b.close())
+    bitmapsRef.current.clear()
+    setClips([])
+    setTransitions([])
+    setKenBurns(false)
+    setIntro(false)
+    setOutro(false)
+    setClassName('')
+    setIntroTitle('')
+    setIntroBg('')
+    setIntroBgImage(false)
+    setOutroHeadline('')
+    setOutroBody('')
+    setOutroBg('')
+    setOutroBgImage(false)
+    setThumbs({})
+    setSelectedIds([])
+    setRestoreMsg('')
+    setAudioUrl('')
+    setAudioBuffer(null)
+    setAudioName('')
+    audioRef.current?.pause()
+    setPlaying(false)
+    purgeAllUploads()
+  }, [clips.length, audioUrl, className, intro, outro, purgeAllUploads])
+
+  // ---------- 선택 (단일 / 다중 / 드래그) ----------
+  const selectClip = (e: React.MouseEvent | React.KeyboardEvent, id: string) => {
+    if (e.metaKey || e.ctrlKey) {
+      // 토글 선택
+      setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+    } else if (e.shiftKey && selectedIds.length > 0) {
+      // 범위 선택 (마지막 선택 지점 ~ 현재)
+      const order = clips.map((c) => c.id)
+      const anchor = selectedIds[selectedIds.length - 1]
+      const a = order.indexOf(anchor)
+      const b = order.indexOf(id)
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a]
+        setSelectedIds(order.slice(lo, hi + 1))
+      } else setSelectedIds([id])
+    } else {
+      setSelectedIds([id])
+    }
   }
+
+  // 타임라인 빈 영역에서 드래그하면 여러 장면을 한 번에 선택
+  const onTrackPointerDown = (e: React.PointerEvent) => {
+    if (e.target !== e.currentTarget) return // 클립 위가 아니라 빈 영역에서만 시작
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    marqueeRef.current = { startX: x, curX: x, left: rect.left, moved: false, pointerId: e.pointerId }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onTrackPointerMove = (e: React.PointerEvent) => {
+    const m = marqueeRef.current
+    if (!m) return
+    m.curX = e.clientX - m.left
+    m.moved = true
+    setMarquee({ x0: Math.min(m.startX, m.curX), x1: Math.max(m.startX, m.curX) })
+  }
+  const onTrackPointerUp = (e: React.PointerEvent) => {
+    const m = marqueeRef.current
+    if (!m) return
+    try {
+      e.currentTarget.releasePointerCapture(m.pointerId)
+    } catch {
+      /* noop */
+    }
+    if (m.moved) {
+      const x0 = Math.min(m.startX, m.curX)
+      const x1 = Math.max(m.startX, m.curX)
+      const st = starts(clips)
+      const ids = clips
+        .filter((c, i) => {
+          const l = st[i] * PPS
+          const r = l + Math.max(20, c.duration * PPS)
+          return r >= x0 && l <= x1
+        })
+        .map((c) => c.id)
+      setSelectedIds(ids)
+    } else {
+      setSelectedIds([]) // 빈 영역 클릭 = 선택 해제
+    }
+    marqueeRef.current = null
+    setMarquee(null)
+  }
+
+  // 단축키: 실행취소/다시실행, Delete/Backspace 삭제, Ctrl+A 전체선택
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      const typing =
+        !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+      if (e.ctrlKey || e.metaKey) {
+        const k = e.key.toLowerCase()
+        if (k === 'z' && !e.shiftKey) {
+          if (typing) return
+          e.preventDefault()
+          undo()
+        } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+          if (typing) return
+          e.preventDefault()
+          redo()
+        } else if (k === 'a') {
+          if (typing || clips.length === 0) return
+          e.preventDefault()
+          setSelectedIds(clips.map((c) => c.id))
+        }
+        return
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (typing || tapSync || selectedIds.length === 0) return
+        e.preventDefault()
+        removeClips(selectedIds)
+      } else if (e.key === 'Escape') {
+        if (selectedIds.length) setSelectedIds([])
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo, clips, selectedIds, tapSync, removeClips])
 
   // ---------- 탭 싱크 ----------
   const startTapSync = () => {
@@ -956,7 +1241,8 @@ export default function Editor() {
     )
   }
 
-  const selectedIndex = clips.findIndex((c) => c.id === selected)
+  const primaryId = selectedIds.length === 1 ? selectedIds[0] : null
+  const selectedIndex = primaryId ? clips.findIndex((c) => c.id === primaryId) : -1
   const selectedClip = selectedIndex >= 0 ? clips[selectedIndex] : null
   // 음원이 없어도 클립 길이 합만큼은 타임라인 폭을 확보해 썸네일이 보이게 함
   const clipsDuration = clips.reduce((s, c) => s + c.duration, 0)
@@ -967,6 +1253,15 @@ export default function Editor() {
       <div className="edit-header">
         <h1 style={{ margin: 0 }}>뮤직비디오 만들기{project.title ? ` — ${project.title}` : ''}</h1>
         <div className="edit-actions">
+          <button className="icon-btn" onClick={undo} disabled={!hist.canUndo} title="실행취소 (Ctrl+Z)" aria-label="실행취소">
+            <span className="material-icons-outlined" aria-hidden="true">undo</span>
+          </button>
+          <button className="icon-btn" onClick={redo} disabled={!hist.canRedo} title="다시실행 (Ctrl+Shift+Z)" aria-label="다시실행">
+            <span className="material-icons-outlined" aria-hidden="true">redo</span>
+          </button>
+          <button className="icon-btn" onClick={resetEditor} title="초기화 (편집 내용 모두 비우기)" aria-label="초기화">
+            <span className="material-icons-outlined" aria-hidden="true">restart_alt</span>
+          </button>
           <button className="icon-btn" onClick={doBackup} title="백업 저장 (편집 상태와 사진을 파일로)" aria-label="백업 저장">
             <span className="material-icons-outlined" aria-hidden="true">save</span>
           </button>
@@ -1147,6 +1442,7 @@ export default function Editor() {
               사진·그림을 추가하면 여기에 순서대로 나타나요. 썸네일을 드래그하면 순서를 바꿀 수 있어요.
             </p>
           ) : (
+            /* 썸네일: 클릭=선택, Ctrl/⌘+클릭=여러 개, Shift+클릭=범위, 빈 곳 드래그=드래그 선택, Delete=삭제 */
             <>
               <div className="timeline-inner" style={{ width: timelineW }}>
                 {audioBuffer && (
@@ -1162,12 +1458,18 @@ export default function Editor() {
                     <div className="playhead" style={{ left: curTime * PPS }} />
                   </div>
                 )}
-                <div className="clip-track" style={{ width: timelineW }}>
+                <div
+                  className="clip-track"
+                  style={{ width: timelineW, height: TRACK_H }}
+                  onPointerDown={onTrackPointerDown}
+                  onPointerMove={onTrackPointerMove}
+                  onPointerUp={onTrackPointerUp}
+                >
                   {clips.map((clip, i) => (
                     <div
                       key={clip.id}
-                      className={`clip ${selected === clip.id ? 'selected' : ''} ${draggingId === clip.id ? 'dragging' : ''}`}
-                      style={{ left: clipStarts[i] * PPS, width: Math.max(20, clip.duration * PPS) }}
+                      className={`clip ${selectedIds.includes(clip.id) ? 'selected' : ''} ${draggingId === clip.id ? 'dragging' : ''}`}
+                      style={{ left: clipStarts[i] * PPS, width: Math.max(20, clip.duration * PPS), height: CLIP_H }}
                     >
                       <div
                         className="clip-body"
@@ -1188,11 +1490,17 @@ export default function Editor() {
                           if (draggedId) reorderClip(draggedId, clip.id)
                           setDraggingId(null)
                         }}
-                        onClick={() => setSelected(clip.id)}
+                        onClick={(e) => selectClip(e, clip.id)}
                         role="button"
                         tabIndex={0}
-                        aria-label={`${i + 1}번째 장면: ${clip.label}. 드래그해서 순서 변경`}
-                        onKeyDown={(e) => e.key === 'Enter' && setSelected(clip.id)}
+                        aria-label={`${i + 1}번째 장면: ${clip.label}. 드래그해서 순서 변경, Delete로 삭제`}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') selectClip(e, clip.id)
+                          else if (e.key === 'Delete' || e.key === 'Backspace') {
+                            e.preventDefault()
+                            removeClips(selectedIds.includes(clip.id) ? selectedIds : [clip.id])
+                          }
+                        }}
                       >
                         {thumbs[clip.id] && <img src={thumbs[clip.id]} alt="" draggable={false} />}
                         <div>
@@ -1219,6 +1527,12 @@ export default function Editor() {
                     </div>
                   ))}
                   {audioBuffer && <div className="playhead" style={{ left: curTime * PPS }} />}
+                  {marquee && (
+                    <div
+                      className="marquee-box"
+                      style={{ left: marquee.x0, width: Math.max(0, marquee.x1 - marquee.x0) }}
+                    />
+                  )}
                 </div>
               </div>
               {!audioBuffer && (
@@ -1229,6 +1543,22 @@ export default function Editor() {
             </>
           )}
         </div>
+
+        {/* 여러 장면 선택됨 */}
+        {selectedIds.length > 1 && (
+          <div className="card" style={{ padding: 14 }}>
+            <div className="option-row" style={{ alignItems: 'center' }}>
+              <strong>{selectedIds.length}개 장면 선택됨</strong>
+              <button className="mini-btn" style={{ color: 'var(--danger)' }} onClick={() => removeClips(selectedIds)}>
+                <span className="material-icons-outlined" aria-hidden="true">delete</span>
+                선택 삭제 (Delete)
+              </button>
+              <button className="mini-btn" onClick={() => setSelectedIds([])}>
+                선택 해제 (Esc)
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 선택된 클립 편집 */}
         {selectedClip && (
